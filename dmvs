@@ -1,0 +1,2424 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local ContentProvider = game:GetService("ContentProvider")
+
+local player = Players.LocalPlayer
+while not player do task.wait() player = Players.LocalPlayer end
+
+local camera = workspace.CurrentCamera
+local mouse = player:GetMouse()
+
+local autoShootEnabled = false
+local autoShootAgresivoEnabled = false
+local autoShootTargetPart = "Torso"
+local silentAimManualEnabled = false
+local silentAimTargetPart = "Torso"        
+local silentAimFovEnabled = false
+local silentAimFovSize = 150              
+local teamCheckEnabled = true
+local espEnabled = false
+local espColor = Color3.fromRGB(255, 0, 0)
+local espLineEnabled = false
+local espLineColor = Color3.fromRGB(255, 0, 0)
+local espNameEnabled = false
+local espNameColor = Color3.fromRGB(255, 0, 0)
+local espAllyEnabled = false
+local espAllyColor = Color3.fromRGB(0, 255, 0)
+local espAllyLineEnabled = false
+local espAllyLineColor = Color3.fromRGB(0, 255, 0)
+local espAllyNameEnabled = false
+local espAllyNameColor = Color3.fromRGB(0, 255, 0)
+local hitboxEnabled = false
+local hitboxInvisible = false
+local hitboxSize = 5
+local hitboxColor = Color3.fromRGB(255, 255, 255)
+local equipGunEnabled = false
+local SelectedAnim = nil
+local SelectedAnimName = nil
+local camlockEnabled = false
+local camlockGunOnly = false
+local camlockKnifeOnly = false
+
+local UIElements = {}
+local NotificationsEnabled = false
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ClanxitadosHub_Overlays"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 999
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local espFolder = Instance.new("Folder")
+espFolder.Name = "ClanxitadosESPFolder"
+espFolder.Parent = screenGui
+
+local function makeDraggable(guiObject, objectToMove, callback)
+    local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+    local function isClickInput(input)
+        return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+    end
+    guiObject.InputBegan:Connect(function(input)
+        if not isClickInput(input) then return end
+        dragging = true; moved = false; dragStart = input.Position; startPos = objectToMove.Position
+    end)
+    guiObject.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input ~= dragInput or not dragging then return end
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 6 then moved = true end
+        if moved then
+            objectToMove.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if not isClickInput(input) or not dragging then return end
+        dragging = false
+        if not moved and callback then callback() end
+    end)
+end
+
+local NotifContainer = Instance.new("Frame")
+NotifContainer.Name = "ClanxitadosMinimalNotifs"
+NotifContainer.Size = UDim2.new(0, 300, 0.5, 0)
+NotifContainer.AnchorPoint = Vector2.new(1, 1)
+NotifContainer.Position = UDim2.new(1, -20, 1, -20)
+NotifContainer.BackgroundTransparency = 1
+NotifContainer.Parent = screenGui
+
+local layout = Instance.new("UIListLayout", NotifContainer)
+layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 8)
+
+local function showBottomMessage(text)
+    if not NotificationsEnabled then return end
+end
+
+local WindUI
+local _version = "1.6.66"
+local uiFileName = "WindUI_Cache_v" .. _version .. ".txt"
+local timeFileName = "WindUI_Cache_v" .. _version .. "_Time.txt"
+
+local ok, result = pcall(function()
+    local cacheValido = false
+    if isfile and isfile(timeFileName) and readfile then
+        local savedTime = tonumber(readfile(timeFileName))
+        if savedTime and (os.time() - savedTime) < 86400 then
+            cacheValido = true
+        end
+    end
+    if cacheValido and isfile and isfile(uiFileName) then
+        return loadstring(readfile(uiFileName))()
+    else
+        local codigoUi = game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/" .. _version .. "/main.lua")
+        if writefile then
+            writefile(uiFileName, codigoUi)
+            writefile(timeFileName, tostring(os.time()))
+        end
+        return loadstring(codigoUi)()
+    end
+end)
+
+if ok and result then
+    WindUI = result
+else
+    warn("Error al cargar WindUI: " .. tostring(result))
+    return
+end
+
+pcall(function()
+    WindUI:AddTheme({
+        Name = "ClanXitadosBlack",
+        Background = Color3.fromRGB(0, 0, 0),
+        Accent = Color3.fromRGB(12, 12, 12),
+        Dialog = Color3.fromRGB(0, 0, 0),
+        Outline = Color3.fromRGB(255, 255, 255),
+        Text = Color3.fromRGB(255, 255, 255),
+        Placeholder = Color3.fromRGB(200, 200, 200),
+        Button = Color3.fromRGB(20, 20, 20),
+        Icon = Color3.fromRGB(255, 255, 255),
+        Toggle = Color3.fromRGB(255, 255, 255),
+        Slider = Color3.fromRGB(255, 255, 255),
+        Checkbox = Color3.fromRGB(255, 255, 255),
+        Primary = Color3.fromRGB(255, 255, 255),
+    })
+end)
+
+local Window = WindUI:CreateWindow({
+    Title = "<font size=\"20\"><font color='#FFFFFF'>Clan </font><font color='#FFFFFF'>Xitados</font></font>",
+    Theme = "ClanXitadosBlack",
+    Folder = "RavnexUI",
+    Acrylic = false,
+    Transparent = false,
+    HideSearchBar = true,
+    Size = UDim2.fromOffset(520, 360),
+    OpenButton = {
+        Title = "Open Xitados",
+        CornerRadius = UDim.new(0, 14),
+        StrokeThickness = 1.1,
+        Enabled = true,
+        Draggable = true,
+        Scale = 0.8,
+        Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    },
+    Topbar = { Height = 48, ButtonsType = "Default" }
+})
+
+pcall(function() WindUI:SetTheme("ClanXitadosBlack") end)
+
+pcall(function()
+    WindUI:Notify({
+        Title = "CREDITOS",
+        Content = "Ron y Diego",
+        Duration = 15,
+    })
+end)
+
+local menuVisible = true
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.M then
+        menuVisible = not menuVisible
+        Window:Toggle(menuVisible)
+    end
+end)
+
+local Tabs = {
+    Baneable = Window:Tab({ Title = "Baneable" }),
+    Legit = Window:Tab({ Title = "Legit" }),
+    Esp = Window:Tab({ Title = "Esp" }),
+    Player = Window:Tab({ Title = "Player" }),
+    Evento = Window:Tab({ Title = "Evento" }),
+    Extras = Window:Tab({ Title = "Extras" }),
+    Anim = Window:Tab({ Title = "Animaciones" })
+}
+
+local COLORES_NEUTROS = {
+    ["White"] = true,
+    ["Medium stone grey"] = true,
+    ["Medium Stone Grey"] = true,
+    ["Really black"] = true,
+    ["Really Black"] = true,
+    ["Institutional white"] = true,
+    ["Institutional White"] = true,
+    ["Ghost grey"] = true,
+    ["Ghost Grey"] = true,
+}
+
+local function esColorVerde(c)
+    if typeof(c) ~= "Color3" then return false end
+    return c.G >= 0.55 and c.G > c.R and c.G > c.B and (c.G - c.R) >= 0.15 and (c.G - c.B) >= 0.15
+end
+
+local function guiTieneVerde(obj)
+    if not obj then return false end
+    local okBg, bg = pcall(function() return obj.BackgroundColor3 end)
+    if okBg and bg and esColorVerde(bg) then return true end
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+        local okT, tc = pcall(function() return obj.TextColor3 end)
+        if okT and tc and esColorVerde(tc) then return true end
+    end
+    if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+        local okI, ic = pcall(function() return obj.ImageColor3 end)
+        if okI and ic and esColorVerde(ic) then return true end
+    end
+    return false
+end
+
+local function contenedorTieneVerde(container)
+    if not container then return false end
+    for _, desc in ipairs(container:GetDescendants()) do
+        if desc:IsA("GuiObject") and guiTieneVerde(desc) then return true end
+        if desc:IsA("Highlight") then
+            if esColorVerde(desc.FillColor) or esColorVerde(desc.OutlineColor) then return true end
+        end
+        if desc:IsA("ParticleEmitter") then
+            local ok, cs = pcall(function() return desc.Color end)
+            if ok and cs then
+                local c0 = cs.Keypoints and cs.Keypoints[1] and cs.Keypoints[1].Value
+                if c0 and esColorVerde(c0) then return true end
+            end
+        end
+        if desc:IsA("PointLight") or desc:IsA("SpotLight") then
+            local ok, c = pcall(function() return desc.Color end)
+            if ok and esColorVerde(c) then return true end
+        end
+        if desc:IsA("BillboardGui") then
+            for _, sub in ipairs(desc:GetDescendants()) do
+                if sub:IsA("GuiObject") and guiTieneVerde(sub) then return true end
+            end
+        end
+    end
+    return false
+end
+
+local marcaAliadoCache = {}
+local MARCA_CACHE_TTL = 1.0
+
+local function invalidarMarcaAliado(targetPlayer)
+    if targetPlayer then marcaAliadoCache[targetPlayer] = nil end
+end
+
+local ATTRS_ALIADO = {
+    "IsAlly","Ally","AllyMarker","isAlly","is_ally","ally",
+    "Teammate","isTeammate","is_teammate","IsTeammate",
+    "Friendly","isFriendly","IsFriendly","is_friendly"
+}
+
+local function tieneMarcaAliado(targetPlayer)
+    if not targetPlayer then return false end
+    local now = os.clock()
+    local cached = marcaAliadoCache[targetPlayer]
+    if cached and (now - cached.time) < MARCA_CACHE_TTL then return cached.value end
+    local resultado = false
+    local char = targetPlayer.Character
+    for _, attrName in ipairs(ATTRS_ALIADO) do
+        local v1 = targetPlayer:GetAttribute(attrName)
+        if v1 == true or v1 == "true" or v1 == "Ally" or v1 == "ally" then resultado = true; break end
+        if char then
+            local v2 = char:GetAttribute(attrName)
+            if v2 == true or v2 == "true" or v2 == "Ally" or v2 == "ally" then resultado = true; break end
+        end
+    end
+    if not resultado then
+        local myAttr = player:GetAttribute("Team") or player:GetAttribute("team")
+        local otherAttr = targetPlayer:GetAttribute("Team") or targetPlayer:GetAttribute("team")
+        if myAttr ~= nil and otherAttr ~= nil and myAttr ~= "" and otherAttr ~= "" and myAttr == otherAttr then
+            resultado = true
+        end
+    end
+    if not resultado and char then
+        local head = char:FindFirstChild("Head")
+        if head then
+            for _, child in ipairs(head:GetChildren()) do
+                if child:IsA("BillboardGui") and contenedorTieneVerde(child) then resultado = true; break end
+                if child:IsA("Highlight") and (esColorVerde(child.FillColor) or esColorVerde(child.OutlineColor)) then resultado = true; break end
+                if child:IsA("Attachment") and contenedorTieneVerde(child) then resultado = true; break end
+            end
+        end
+    end
+    if not resultado and char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for _, child in ipairs(hrp:GetChildren()) do
+                if child:IsA("BillboardGui") and contenedorTieneVerde(child) then resultado = true; break end
+                if child:IsA("Attachment") and contenedorTieneVerde(child) then resultado = true; break end
+                if child:IsA("Highlight") and (esColorVerde(child.FillColor) or esColorVerde(child.OutlineColor)) then resultado = true; break end
+            end
+        end
+    end
+    if not resultado and char then
+        for _, child in ipairs(char:GetChildren()) do
+            if child:IsA("Highlight") then
+                if esColorVerde(child.FillColor) or esColorVerde(child.OutlineColor) then resultado = true; break end
+            end
+        end
+    end
+    if not resultado and char then
+        local head = char:FindFirstChild("Head")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if head and contenedorTieneVerde(head) then resultado = true end
+        if not resultado and hrp and contenedorTieneVerde(hrp) then resultado = true end
+    end
+    marcaAliadoCache[targetPlayer] = { value = resultado, time = now }
+    return resultado
+end
+
+local function isEnemy(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return false end
+    if tieneMarcaAliado(targetPlayer) then return false end
+    if not teamCheckEnabled then return true end
+    local myColorName = player.TeamColor and player.TeamColor.Name or "White"
+    local otherColorName = targetPlayer.TeamColor and targetPlayer.TeamColor.Name or "White"
+    local myColorNeutral = COLORES_NEUTROS[myColorName] == true
+    local otherColorNeutral = COLORES_NEUTROS[otherColorName] == true
+    if not myColorNeutral and not otherColorNeutral then
+        if player.TeamColor == targetPlayer.TeamColor then return false else return true end
+    end
+    if player.Team ~= nil and targetPlayer.Team ~= nil then
+        if player.Team == targetPlayer.Team then return false end
+        return true
+    end
+    local myAttr = player:GetAttribute("Team") or player:GetAttribute("team")
+    local otherAttr = targetPlayer:GetAttribute("Team") or targetPlayer:GetAttribute("team")
+    if myAttr ~= nil and otherAttr ~= nil and myAttr ~= "" and otherAttr ~= "" then
+        return myAttr ~= otherAttr
+    end
+    return true
+end
+
+local function esCompaneroDeEquipo(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return true end
+    local myColor = player.TeamColor
+    local otherColor = targetPlayer.TeamColor
+    if myColor and otherColor then
+        local myName = myColor.Name
+        local otherName = otherColor.Name
+        local myNeutral = COLORES_NEUTROS[myName] == true
+        local otherNeutral = COLORES_NEUTROS[otherName] == true
+        if not myNeutral and not otherNeutral then return myColor == otherColor end
+    end
+    if player.Team and targetPlayer.Team then return player.Team == targetPlayer.Team end
+    local myAttr = player:GetAttribute("Team") or player:GetAttribute("team")
+    local otherAttr = targetPlayer:GetAttribute("Team") or targetPlayer:GetAttribute("team")
+    if myAttr and otherAttr and myAttr ~= "" and otherAttr ~= "" then return myAttr == otherAttr end
+    return false
+end
+
+local function isAlly(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return false end
+    if tieneMarcaAliado(targetPlayer) then return true end
+    return esCompaneroDeEquipo(targetPlayer)
+end
+
+local function estaEnLobby()
+    local char = player.Character
+    if not char then return true end
+    if char:FindFirstChildOfClass("ForceField") then return true end
+    if player.Team then
+        local tName = string.lower(player.Team.Name)
+        if string.find(tName, "lobby") or string.find(tName, "spectat") or string.find(tName, "espectador") or string.find(tName, "menu") or string.find(tName, "dead") then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsInMatchStrict()
+    local gui = player:FindFirstChild("PlayerGui")
+    if not gui then return false end
+    local main = gui:FindFirstChild("Main") or gui
+    local gameFrame = main:FindFirstChild("MainGameFrame")
+    if not gameFrame or not gameFrame.Visible then return false end
+    local score = gameFrame:FindFirstChild("IngameScore")
+    local timer = score and score:FindFirstChild("Timer")
+    if not timer then return false end
+    if not (timer:IsA("TextLabel") or timer:IsA("TextButton") or timer:IsA("TextBox")) then return false end
+    local txt = tostring(timer.Text or ""):gsub("%s", "")
+    if txt == "" then return false end
+    if string.find(txt, "-") then return false end
+    if txt == "0:00" or txt == "00:00" or txt == "0:0" then return false end
+    return txt:match("^%d+:%d%d$") ~= nil
+end
+
+local function IsInMatchOrLoading()
+    local gui = player:FindFirstChild("PlayerGui")
+    if not gui then return false end
+    local main = gui:FindFirstChild("Main") or gui
+    local gameFrame = main:FindFirstChild("MainGameFrame")
+    if not gameFrame or not gameFrame.Visible then return false end
+    local gameAttr = player:GetAttribute("Game")
+    if gameAttr == nil or gameAttr == "" then return false end
+    return true
+end
+
+local function esEnemigoValido(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return false end
+    if not isEnemy(targetPlayer) then return false end
+    local char = targetPlayer.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    if char:FindFirstChildOfClass("ForceField") then return false end
+    if targetPlayer.Team then
+        local tName = string.lower(targetPlayer.Team.Name)
+        if string.find(tName, "lobby") or string.find(tName, "spectat") or string.find(tName, "espectador") or string.find(tName, "menu") or string.find(tName, "dead") then
+            return false
+        end
+    end
+    return true
+end
+
+local function esCuchillo(item)
+    if not item or not item:IsA("Tool") then return false end
+    if item:FindFirstChild("Slash") or item:FindFirstChild("SlashStart") then return true end
+    local nombre = string.lower(item.Name)
+    if string.find(nombre, "knife") or string.find(nombre, "cuchillo") or string.find(nombre, "dagger") then return true end
+    return false
+end
+
+local function esPistola(item)
+    if not item or not item:IsA("Tool") then return false end
+    if item:FindFirstChild("Throw", true) or item:FindFirstChild("KnifeClient", true) or item:FindFirstChild("KnifeServer", true) then return false end
+    if esCuchillo(item) then return false end
+    local nombre = string.lower(item.Name)
+    local ignorar = {"combat", "fist", "wallet", "phone", "punch", "boombox", "radio", "knife", "blade", "cuchillo", "dagger", "kunai", "sword", "toy", "juguete", "pizza", "burger", "teddy", "balloon", "drink", "food"}
+    for _, palabra in ipairs(ignorar) do if string.find(nombre, palabra) then return false end end
+    return true
+end
+
+local function obtenerPistola()
+    local char = player.Character
+    if not char then return nil end
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if char then for _, item in ipairs(char:GetChildren()) do if esPistola(item) then return item end end end
+    if backpack then for _, item in ipairs(backpack:GetChildren()) do if esPistola(item) then return item end end end
+    return nil
+end
+
+local function estaRecargando(arma)
+    if not arma or not arma:IsA("Tool") then return false end
+    for _, name in ipairs({"Reloading", "IsReloading", "reloading", "isReloading", "Reload", "reload"}) do
+        local v = arma:GetAttribute(name)
+        if v == true or v == "true" then return true end
+    end
+    for _, child in ipairs(arma:GetChildren()) do
+        if child:IsA("BoolValue") and child.Value == true then
+            local n = string.lower(child.Name)
+            if string.find(n, "reload") or string.find(n, "recarg") then return true end
+        end
+    end
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+            local animId = track.Animation and track.Animation.AnimationId or ""
+            if string.find(string.lower(animId), "reload") then return true end
+        end
+    end
+    for _, s in ipairs(arma:GetDescendants()) do
+        if s:IsA("Sound") and s.Playing then
+            local n = string.lower(s.Name)
+            if string.find(n, "reload") or string.find(n, "recarg") then return true end
+        end
+    end
+    return false
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= player then p.CharacterAdded:Connect(function() invalidarMarcaAliado(p) end) end
+end
+Players.PlayerAdded:Connect(function(p)
+    if p ~= player then p.CharacterAdded:Connect(function() invalidarMarcaAliado(p) end) end
+end)
+Players.PlayerRemoving:Connect(function(p) invalidarMarcaAliado(p) end)
+player.CharacterAdded:Connect(function() for p in pairs(marcaAliadoCache) do marcaAliadoCache[p] = nil end end)
+
+local ConnectionManager = {}
+ConnectionManager.__index = ConnectionManager
+function ConnectionManager.new() return setmetatable({ Items = {} }, ConnectionManager) end
+function ConnectionManager:Add(task) self.Items[#self.Items + 1] = task; return task end
+function ConnectionManager:Cleanup()
+    for i = #self.Items, 1, -1 do
+        local item = self.Items[i]
+        self.Items[i] = nil
+        local t = typeof(item)
+        if t == "RBXScriptConnection" then pcall(function() item:Disconnect() end)
+        elseif t == "Instance" then pcall(function() item:Destroy() end)
+        elseif t == "function" then pcall(item) end
+    end
+end
+
+local function limpiarHitboxes()
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        local character = targetPlayer.Character
+        if character then
+            local hitbox = character:FindFirstChild("GhostHitbox")
+            if hitbox then hitbox:Destroy() end
+        end
+    end
+end
+
+local function limpiarAgresivoHitboxes()
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        local character = targetPlayer.Character
+        if character then
+            local hitbox = character:FindFirstChild("AgresivoHitbox")
+            if hitbox then hitbox:Destroy() end
+        end
+    end
+end
+
+local AGRESIVO_HITBOX_SIZE = 4
+
+task.spawn(function()
+    while task.wait(0.2) do
+        if not hitboxEnabled then continue end
+        if not IsInMatchStrict() then limpiarHitboxes(); continue end
+        local tamanoObjetivo = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+        local transObjetivo = hitboxInvisible and 1 or 0.6
+        for _, targetPlayer in ipairs(Players:GetPlayers()) do
+            if targetPlayer ~= player and not esCompaneroDeEquipo(targetPlayer) and isEnemy(targetPlayer) then
+                local character = targetPlayer.Character
+                if character then
+                    local rootPart = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    if rootPart and humanoid and humanoid.Health > 0 then
+                        local hitbox = character:FindFirstChild("GhostHitbox")
+                        if not hitbox then
+                            hitbox = Instance.new("Part")
+                            hitbox.Name = "GhostHitbox"
+                            hitbox.Size = tamanoObjetivo
+                            hitbox.Transparency = transObjetivo
+                            hitbox.Color = hitboxColor
+                            hitbox.CanCollide = false
+                            hitbox.Massless = true
+                            hitbox.CanQuery = true
+                            hitbox.CFrame = rootPart.CFrame
+                            hitbox.Parent = character
+                            local weld = Instance.new("WeldConstraint")
+                            weld.Part0 = rootPart
+                            weld.Part1 = hitbox
+                            weld.Parent = hitbox
+                        else
+                            if hitbox.Size ~= tamanoObjetivo then hitbox.Size = tamanoObjetivo end
+                            if hitbox.Transparency ~= transObjetivo then hitbox.Transparency = transObjetivo end
+                            if hitbox.Color ~= hitboxColor then hitbox.Color = hitboxColor end
+                            if not hitbox.CanQuery then hitbox.CanQuery = true end
+                        end
+                    else
+                        local hitbox = character:FindFirstChild("GhostHitbox")
+                        if hitbox then hitbox:Destroy() end
+                    end
+                end
+            else
+                local char = targetPlayer.Character
+                if char then
+                    local hb = char:FindFirstChild("GhostHitbox")
+                    if hb then hb:Destroy() end
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.2) do
+        if not autoShootAgresivoEnabled then limpiarAgresivoHitboxes(); continue end
+        if not IsInMatchStrict() then limpiarAgresivoHitboxes(); continue end
+        local tamano = Vector3.new(AGRESIVO_HITBOX_SIZE, AGRESIVO_HITBOX_SIZE, AGRESIVO_HITBOX_SIZE)
+        for _, targetPlayer in ipairs(Players:GetPlayers()) do
+            if targetPlayer ~= player and not esCompaneroDeEquipo(targetPlayer) and isEnemy(targetPlayer) then
+                local character = targetPlayer.Character
+                if character then
+                    local rootPart = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    if rootPart and humanoid and humanoid.Health > 0 then
+                        local hitbox = character:FindFirstChild("AgresivoHitbox")
+                        if not hitbox then
+                            hitbox = Instance.new("Part")
+                            hitbox.Name = "AgresivoHitbox"
+                            hitbox.Size = tamano
+                            hitbox.Transparency = 1
+                            hitbox.CanCollide = false
+                            hitbox.Massless = true
+                            hitbox.CanQuery = true
+                            hitbox.CFrame = rootPart.CFrame
+                            hitbox.Parent = character
+                            local weld = Instance.new("WeldConstraint")
+                            weld.Part0 = rootPart
+                            weld.Part1 = hitbox
+                            weld.Parent = hitbox
+                        else
+                            if hitbox.Size ~= tamano then hitbox.Size = tamano end
+                            if hitbox.Transparency ~= 1 then hitbox.Transparency = 1 end
+                            if not hitbox.CanQuery then hitbox.CanQuery = true end
+                        end
+                    else
+                        local hitbox = character:FindFirstChild("AgresivoHitbox")
+                        if hitbox then hitbox:Destroy() end
+                    end
+                end
+            else
+                local char = targetPlayer.Character
+                if char then
+                    local hb = char:FindFirstChild("AgresivoHitbox")
+                    if hb then hb:Destroy() end
+                end
+            end
+        end
+    end
+end)
+
+local EQUIP_TIMEOUT = 0.6
+local EQUIP_HOLD_TIME = 0.25
+local SHOOT_SETTLE = 0.04
+local SHOOT_DEACTIVATE_DELAY = 0.05
+local SHOOT_COOLDOWN = 0.2
+local AUTO_EQUIP_INTERVAL = 0.15
+local CAMLOCK_PREDICTION = 0.18
+local CAMLOCK_MAX_DIST = 900
+local CAMLOCK_FOV_PX = 260
+local CAMLOCK_LERP = 0.10
+local CAMLOCK_RETARGET_INTERVAL = 0.35
+
+local shootBusy = false
+local lastShootTime = 0
+local equipBusy = false
+local camlockTarget = nil
+local lastRetargetTime = 0
+
+local function waitToolEquipped(tool, humanoid, timeout)
+    local start = os.clock()
+    while os.clock() - start < timeout do
+        local char = player.Character
+        if not char or not humanoid.Parent then return false end
+        if tool.Parent == char then return true end
+        task.wait()
+    end
+    return false
+end
+
+local function obtenerPistolaEnBackpack()
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if not backpack then return nil end
+    for _, item in ipairs(backpack:GetChildren()) do
+        if esPistola(item) then return item end
+    end
+    return nil
+end
+
+local function equipGunOnce()
+    local char = player.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    local current = char:FindFirstChildOfClass("Tool")
+    if current and esPistola(current) then return true end
+    local gun = obtenerPistolaEnBackpack()
+    if not gun then return false end
+    pcall(function() hum:EquipTool(gun) end)
+    return waitToolEquipped(gun, hum, EQUIP_TIMEOUT)
+end
+
+local function shootOnce(char, hum)
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or not esPistola(tool) then return end
+    if estaRecargando(tool) then return end
+    pcall(function() tool:Activate() end)
+    task.wait(SHOOT_SETTLE)
+    pcall(function() if tool.Parent == char then tool:Deactivate() end end)
+end
+
+Tabs.Baneable:Section({ Title = "AutoShot" })
+UIElements.TogAutoShoot = Tabs.Baneable:Toggle({
+    Title = "AutoShot",
+    Callback = function(Value)
+        autoShootEnabled = Value
+        if not Value and not autoShootAgresivoEnabled then getgenv().ClanxitadosTargetPart = nil end
+    end
+})
+
+UIElements.TogAutoShootAgr = Tabs.Baneable:Toggle({
+    Title = "AutoShot Agresive",
+    Callback = function(Value)
+        autoShootAgresivoEnabled = Value
+        if not Value then
+            for _, targetPlayer in ipairs(Players:GetPlayers()) do
+                local character = targetPlayer.Character
+                if character then
+                    local hb = character:FindFirstChild("AgresivoHitbox")
+                    if hb then hb:Destroy() end
+                end
+            end
+        end
+        if not Value and not autoShootEnabled then getgenv().ClanxitadosTargetPart = nil end
+    end
+})
+
+UIElements.TogEquipGun = Tabs.Baneable:Toggle({
+    Title = "Auto Equip Gun",
+    Value = false,
+    Callback = function(Value) equipGunEnabled = Value end
+})
+
+UIElements.DropAutoShootPart = Tabs.Baneable:Dropdown({
+    Title = "Target",
+    Values = { "Cabeza", "Torso", "Cuerpo Completo" },
+    Value = "Torso",
+    Callback = function(Value) autoShootTargetPart = Value end
+})
+
+task.spawn(function()
+    while task.wait(AUTO_EQUIP_INTERVAL) do
+        if not equipGunEnabled then continue end
+        if not (autoShootEnabled or autoShootAgresivoEnabled) then continue end
+        if not IsInMatchStrict() then continue end
+        if equipBusy then continue end
+        local gun = obtenerPistola()
+        if not gun then continue end
+        if estaRecargando(gun) then continue end
+        local char = player.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local head = char:FindFirstChild("Head")
+        if not hum or hum.Health <= 0 or not head then continue end
+        local origin = head.Position
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        local viewport = workspace.CurrentCamera.ViewportSize
+        local hayEnemigoVisible = false
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and esEnemigoValido(p) then
+                local pChar = p.Character
+                if pChar then
+                    local targetPart = pChar:FindFirstChild("Head") or pChar:FindFirstChild("UpperTorso") or pChar:FindFirstChild("Torso") or pChar:FindFirstChild("HumanoidRootPart")
+                    if targetPart and targetPart:IsA("BasePart") then
+                        local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPart.Position)
+                        if onScreen and screenPos.Z > 0 and screenPos.X >= 0 and screenPos.X <= viewport.X and screenPos.Y >= 0 and screenPos.Y <= viewport.Y then
+                            params.FilterDescendantsInstances = { char, pChar }
+                            local hit = workspace:Raycast(origin, targetPart.Position - origin, params)
+                            if not hit or (hit.Instance and hit.Instance:IsDescendantOf(pChar)) then
+                                hayEnemigoVisible = true; break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if not hayEnemigoVisible then continue end
+        equipBusy = true
+        local equipped = pcall(equipGunOnce)
+        if equipped then
+            task.wait(EQUIP_HOLD_TIME)
+            local waitStart = os.clock()
+            while os.clock() - waitStart < 2.5 do
+                local g = obtenerPistola()
+                if not g or not estaRecargando(g) then break end
+                task.wait(0.05)
+            end
+        end
+        local gNow = obtenerPistola()
+        if gNow and estaRecargando(gNow) then equipBusy = false; continue end
+        local charNow = player.Character
+        local humNow = charNow and charNow:FindFirstChildOfClass("Humanoid")
+        if humNow then pcall(function() humNow:UnequipTools() end) end
+        equipBusy = false
+    end
+end)
+
+Tabs.Legit:Section({ Title = "Triggerbot" })
+
+local TRIGGER_DELAY = 0.02
+local TRIGGER_SHOOT = 0.05
+local TRIGGER_COOLDOWN = 0.18
+local TRIGGER_MIN_VISIBLE_POINTS = 2
+getgenv().TriggerEnabled = false
+
+local triggerRayParams = RaycastParams.new()
+triggerRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function triggerTargetClearlyVisible(character)
+    local cam = workspace.CurrentCamera
+    local myCharacter = player.Character
+    if not cam or not character or not myCharacter then return false end
+    local samples = {
+        character:FindFirstChild("Head"),
+        character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"),
+        character:FindFirstChild("HumanoidRootPart")
+    }
+    triggerRayParams.FilterDescendantsInstances = {myCharacter, character}
+    local visiblePoints = 0
+    for _, part in ipairs(samples) do
+        if part and part:IsA("BasePart") then
+            local screenPos, onScreen = cam:WorldToViewportPoint(part.Position)
+            if onScreen and screenPos.Z > 0 then
+                local origin = cam.CFrame.Position
+                local direction = part.Position - origin
+                local obstruction = workspace:Raycast(origin, direction, triggerRayParams)
+                if not obstruction then
+                    visiblePoints += 1
+                    if visiblePoints >= TRIGGER_MIN_VISIBLE_POINTS then return true end
+                end
+            end
+        end
+    end
+    return false
+end
+
+UIElements.TogTriggerbot = Tabs.Legit:Toggle({
+    Title = "Triggerbot",
+    Value = false,
+    Callback = function(enabled) getgenv().TriggerEnabled = enabled == true end
+})
+
+task.spawn(function()
+    while task.wait() do
+        if not getgenv().TriggerEnabled then continue end
+        local myCharacter = player.Character
+        local tool = myCharacter and myCharacter:FindFirstChildOfClass("Tool")
+        if not (tool and esPistola(tool)) then continue end
+        local target = mouse.Target
+        if not (target and target.Parent) then continue end
+        local character = target:FindFirstAncestorOfClass("Model")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid.Health > 0 then
+            local targetPlayer = Players:GetPlayerFromCharacter(character)
+            if targetPlayer and esEnemigoValido(targetPlayer) and triggerTargetClearlyVisible(character) then
+                task.wait(TRIGGER_DELAY)
+                if not getgenv().TriggerEnabled then continue end
+                myCharacter = player.Character
+                tool = myCharacter and myCharacter:FindFirstChildOfClass("Tool")
+                if not (tool and esPistola(tool)) then continue end
+                if not character.Parent or humanoid.Health <= 0 or not triggerTargetClearlyVisible(character) then continue end
+                pcall(function() mouse1press() end)
+                task.wait(TRIGGER_SHOOT)
+                pcall(function() mouse1release() end)
+                task.wait(TRIGGER_COOLDOWN)
+            end
+        end
+    end
+end)
+
+Tabs.Legit:Section({ Title = "Macro" })
+
+local macroEnabled = false
+local macroBusy = false
+local touchHeld = false
+
+local function isInMatch()
+    local gui = player:FindFirstChild("PlayerGui")
+    if not gui then return false end
+    local main = gui:FindFirstChild("Main") or gui
+    local gameFrame = main:FindFirstChild("MainGameFrame")
+    if not gameFrame or not gameFrame.Visible then return false end
+    local score = gameFrame:FindFirstChild("IngameScore")
+    local timer = score and score:FindFirstChild("Timer")
+    if not timer then return false end
+    local value = tostring(timer.Text or ""):gsub("%s", "")
+    if value == "" or value:find("-", 1, true) or value == "0:00" or value == "00:00" then return false end
+    return value:match("^%d+:%d%d$") ~= nil
+end
+
+local function isLobby()
+    local character = player.Character
+    if not character then return true end
+    if character:FindFirstChildOfClass("ForceField") then return true end
+    local team = player.Team
+    if team then
+        local name = string.lower(team.Name)
+        for _, word in ipairs({"lobby", "spectat", "espectador", "menu", "dead"}) do
+            if name:find(word, 1, true) then return true end
+        end
+    end
+    return not isInMatch()
+end
+
+local function isKnife(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local name = string.lower(tool.Name)
+    return name == "1" or name:find("knife", 1, true) ~= nil or name:find("cuchillo", 1, true) ~= nil
+        or name:find("dagger", 1, true) ~= nil or tool:FindFirstChild("Slash") ~= nil or tool:FindFirstChild("SlashStart") ~= nil
+end
+
+local function isGun(tool)
+    if not tool or not tool:IsA("Tool") or isKnife(tool) then return false end
+    if tool:FindFirstChild("Throw", true) or tool:FindFirstChild("KnifeClient", true) or tool:FindFirstChild("KnifeServer", true) then return false end
+    local name = string.lower(tool.Name)
+    for _, word in ipairs({"combat","fist","wallet","phone","punch","boombox","radio","blade","kunai","sword","toy","juguete","pizza","burger","teddy","balloon","drink","food"}) do
+        if name:find(word, 1, true) then return false end
+    end
+    return true
+end
+
+local function getGun()
+    local character = player.Character
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if character then for _, item in ipairs(character:GetChildren()) do if isGun(item) then return item end end end
+    if backpack then for _, item in ipairs(backpack:GetChildren()) do if isGun(item) then return item end end end
+    return nil
+end
+
+local function knifeEquipped()
+    local character = player.Character
+    local tool = character and character:FindFirstChildOfClass("Tool")
+    return isKnife(tool)
+end
+
+UIElements.TogMacro = Tabs.Legit:Toggle({
+    Title = "Macro",
+    Value = false,
+    Callback = function(enabled) macroEnabled = enabled == true end
+})
+
+local function runMacro()
+    if not macroEnabled or macroBusy or isLobby() or knifeEquipped() then return end
+    macroBusy = true
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not character or not humanoid or humanoid.Health <= 0 then macroBusy = false; return end
+    if isLobby() or knifeEquipped() then macroBusy = false; return end
+    local gun = getGun()
+    if gun then
+        if gun.Parent ~= character then pcall(function() humanoid:EquipTool(gun) end); task.wait(0.04) end
+        if macroEnabled and not isLobby() and not knifeEquipped() and gun.Parent == character then
+            pcall(function() gun:Activate() end)
+            task.wait(0.08)
+            pcall(function() if gun.Parent == player.Character then humanoid:UnequipTools() end end)
+        end
+    end
+    macroBusy = false
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or not macroEnabled then return end
+    if isLobby() or knifeEquipped() then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then runMacro()
+    elseif input.UserInputType == Enum.UserInputType.Touch then touchHeld = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then touchHeld = false end
+end)
+
+task.spawn(function()
+    while task.wait(0.05) do
+        if macroEnabled and touchHeld and not isLobby() and not knifeEquipped() then runMacro() end
+    end
+end)
+
+local camlockRayParams = RaycastParams.new()
+camlockRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function getCamlockAimPart(char)
+    if not char then return nil end
+    return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+end
+
+local function camlockVisible(from, part, myChar)
+    if not part or not part.Parent then return false end
+    local enemyChar = part.Parent
+    camlockRayParams.FilterDescendantsInstances = { myChar, enemyChar }
+    local dir = part.Position - from
+    local hit = workspace:Raycast(from, dir, camlockRayParams)
+    if not hit then return true end
+    return hit.Instance and hit.Instance:IsDescendantOf(enemyChar)
+end
+
+local function FindNearestEnemyCamlock()
+    local myChar = player.Character
+    if not myChar then return nil end
+    local myHead = myChar:FindFirstChild("Head") or myChar:FindFirstChild("HumanoidRootPart")
+    if not myHead then return nil end
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+    local screenCenter = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    local origin = myHead.Position
+    local bestPart, bestScore = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and esEnemigoValido(p) then
+            local char = p.Character
+            if char then
+                local aimPart = getCamlockAimPart(char)
+                if aimPart and aimPart:IsA("BasePart") then
+                    local dist3d = (aimPart.Position - origin).Magnitude
+                    if dist3d <= CAMLOCK_MAX_DIST then
+                        local pos2d, onScreen = cam:WorldToViewportPoint(aimPart.Position)
+                        if onScreen and pos2d.Z > 0 then
+                            local screenDist = (screenCenter - Vector2.new(pos2d.X, pos2d.Y)).Magnitude
+                            if screenDist <= CAMLOCK_FOV_PX then
+                                if camlockVisible(origin, aimPart, myChar) then
+                                    local score = screenDist + dist3d * 0.05
+                                    if score < bestScore then bestScore = score; bestPart = aimPart end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestPart
+end
+
+local function tieneArmaEnMano()
+    local char = player.Character
+    if not char then return false end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return false end
+    return esPistola(tool)
+end
+
+local function tieneCuchilloEnMano()
+    local char = player.Character
+    if not char then return false end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return false end
+    return esCuchillo(tool)
+end
+
+local function camlockPuedeActivar()
+    if not camlockEnabled then return false end
+    if camlockGunOnly and camlockKnifeOnly then return tieneArmaEnMano() or tieneCuchilloEnMano()
+    elseif camlockGunOnly then return tieneArmaEnMano()
+    elseif camlockKnifeOnly then return tieneCuchilloEnMano() end
+    return true
+end
+
+Tabs.Legit:Section({ Title = "Camlock" })
+UIElements.TogCamlock = Tabs.Legit:Toggle({ Title = "Camlock", Value = false, Callback = function(v) camlockEnabled = v == true; if not camlockEnabled then camlockTarget = nil end end })
+UIElements.TogCamlockGunOnly = Tabs.Legit:Toggle({ Title = "Gun Only", Value = false, Callback = function(v) camlockGunOnly = v == true; if camlockGunOnly and camlockKnifeOnly then camlockKnifeOnly = false; if UIElements.TogCamlockKnifeOnly then pcall(function() UIElements.TogCamlockKnifeOnly:Set(false) end) end end end })
+UIElements.TogCamlockKnifeOnly = Tabs.Legit:Toggle({ Title = "Knife Only", Value = false, Callback = function(v) camlockKnifeOnly = v == true; if camlockKnifeOnly and camlockGunOnly then camlockGunOnly = false; if UIElements.TogCamlockGunOnly then pcall(function() UIElements.TogCamlockGunOnly:Set(false) end) end end end })
+
+local camlockLastFrame = os.clock()
+RunService.RenderStepped:Connect(function()
+    local now = os.clock()
+    local dt = math.clamp(now - camlockLastFrame, 0, 1 / 20)
+    camlockLastFrame = now
+    if not camlockPuedeActivar() then camlockTarget = nil; return end
+    local cam = workspace.CurrentCamera
+    local myChar = player.Character
+    local myHead = myChar and (myChar:FindFirstChild("Head") or myChar:FindFirstChild("HumanoidRootPart"))
+    if not cam or not myHead then camlockTarget = nil; return end
+    local needNew = not (camlockTarget and camlockTarget.Parent)
+    if not needNew then
+        local enemyChar = camlockTarget:FindFirstAncestorOfClass("Model")
+        local targetPlayer = enemyChar and Players:GetPlayerFromCharacter(enemyChar)
+        local screenPos, onScreen = cam:WorldToViewportPoint(camlockTarget.Position)
+        if not targetPlayer or not esEnemigoValido(targetPlayer) or not onScreen or screenPos.Z <= 0 or (camlockTarget.Position - myHead.Position).Magnitude > CAMLOCK_MAX_DIST or not camlockVisible(myHead.Position, camlockTarget, myChar) then
+            needNew = true
+        end
+    end
+    if needNew then camlockTarget = FindNearestEnemyCamlock(); lastRetargetTime = now end
+    if camlockTarget and camlockTarget.Parent then
+        local velocity = camlockTarget.AssemblyLinearVelocity
+        if velocity.Magnitude > 120 then velocity = velocity.Unit * 120 end
+        local predictPos = camlockTarget.Position + velocity * CAMLOCK_PREDICTION
+        local currentCF = cam.CFrame
+        local targetCF = CFrame.lookAt(currentCF.Position, predictPos)
+        local alpha = 1 - math.exp(-CAMLOCK_LERP * 60 * dt)
+        cam.CFrame = currentCF:Lerp(targetCF, math.clamp(alpha, 0, 0.35))
+    end
+end)
+
+Tabs.Baneable:Section({ Title = "Silent Aim (sirve para cuchillo)" })
+
+UIElements.TogSilentAimManual = Tabs.Baneable:Toggle({
+    Title = "Silent Aim",
+    Callback = function(Value)
+        silentAimManualEnabled = Value
+        if Value and UIElements.TogSilentAimFov then
+            pcall(function() UIElements.TogSilentAimFov:Set(false) end)
+        end
+        if not Value and not autoShootEnabled and not autoShootAgresivoEnabled then getgenv().ClanxitadosTargetPart = nil end
+    end
+})
+
+UIElements.TogSilentAimFov = Tabs.Baneable:Toggle({
+    Title = "Silent Aim Con Fov",
+    Value = false,
+    Callback = function(Value)
+        silentAimFovEnabled = Value
+        if Value and UIElements.TogSilentAimManual then
+            pcall(function() UIElements.TogSilentAimManual:Set(false) end)
+        end
+        if not Value and not silentAimManualEnabled and not autoShootEnabled and not autoShootAgresivoEnabled then
+            getgenv().ClanxitadosTargetPart = nil
+        end
+    end
+})
+
+UIElements.DropSilentAimPart = Tabs.Baneable:Dropdown({
+    Title = "Target",
+    Values = { "Cabeza", "Torso", "Cuerpo Completo" },
+    Value = "Torso",                    
+    Callback = function(Value) silentAimTargetPart = Value end
+})
+
+UIElements.SliSilentAimFovSize = Tabs.Baneable:Slider({
+    Title = "Fov Size",
+    Step = 1,
+    Value = { Min = 10, Max = 250, Default = 150 },  
+    Callback = function(v) silentAimFovSize = v end
+})
+
+local fovDrawing = nil
+local fovFrame = nil
+local fovGui = nil
+
+local function getFovParent()
+    local parentGui = nil
+    pcall(function() if typeof(gethui) == "function" then parentGui = gethui() end end)
+    if parentGui then return parentGui end
+    local ok, core = pcall(function() return game:GetService("CoreGui") end)
+    if ok and core then return core end
+    return player:WaitForChild("PlayerGui")
+end
+
+local function ensureFovVisual()
+    if not fovFrame then
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "ClanxitadosFovCircle"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.DisplayOrder = 100000
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        pcall(function() gui.Parent = getFovParent() end)
+        if not gui.Parent then gui.Parent = player:WaitForChild("PlayerGui") end
+        fovGui = gui
+
+        local frame = Instance.new("Frame")
+        frame.Name = "FovCircle"
+        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+        frame.Position = UDim2.fromScale(0.5, 0.5)
+        frame.Size = UDim2.fromOffset(silentAimFovSize * 2, silentAimFovSize * 2)
+        frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel = 0
+        frame.Visible = false
+        frame.ZIndex = 100
+        frame.Parent = gui
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Name = "Ring"
+        stroke.Color = Color3.fromRGB(255, 255, 255)
+        stroke.Thickness = 2
+        stroke.Transparency = 0
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Parent = frame
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(1, 0)
+        corner.Parent = frame
+
+        fovFrame = frame
+    end
+
+    if Drawing and not fovDrawing then
+        local ok, circ = pcall(function()
+            local c = Drawing.new("Circle")
+            c.Thickness = 2
+            c.NumSides = 64
+            c.Radius = silentAimFovSize
+            c.Filled = false
+            c.Color = Color3.fromRGB(255, 255, 255)
+            c.Transparency = 1
+            c.Visible = false
+            return c
+        end)
+        if ok then fovDrawing = circ end
+    end
+end
+ensureFovVisual()
+
+RunService.RenderStepped:Connect(function()
+    local show = silentAimFovEnabled == true
+    local cam = workspace.CurrentCamera
+    if not cam then
+        if fovDrawing then pcall(function() fovDrawing.Visible = false end) end
+        if fovFrame then fovFrame.Visible = false end
+        return
+    end
+    local vs = cam.ViewportSize
+    local center = Vector2.new(vs.X * 0.5, vs.Y * 0.5)
+
+    if fovFrame then
+        if not fovFrame.Parent and fovGui then fovFrame.Parent = fovGui end
+        fovFrame.Position = UDim2.fromOffset(center.X, center.Y)
+        fovFrame.Size = UDim2.fromOffset(silentAimFovSize * 2, silentAimFovSize * 2)
+        fovFrame.Visible = show
+    end
+
+    if fovDrawing then
+        pcall(function()
+            fovDrawing.Position = center
+            fovDrawing.Radius = silentAimFovSize
+            fovDrawing.Visible = show
+        end)
+    end
+end)
+
+Tabs.Baneable:Section({ Title = "Hitbox" })
+UIElements.TogHitbox = Tabs.Baneable:Toggle({ Title = "Hitbox", Value = false, Callback = function(Value) hitboxEnabled = Value; if not Value then limpiarHitboxes() end end })
+UIElements.TogHitboxInvisible = Tabs.Baneable:Toggle({ Title = "Hitbox Invisible", Value = false, Callback = function(Value) hitboxInvisible = Value end })
+UIElements.SliHitboxSize = Tabs.Baneable:Slider({ Title = "Hitbox Size", Step = 0.5, Value = { Min = 1.0, Max = 30.0, Default = 5 }, Callback = function(v) hitboxSize = v end })
+Tabs.Baneable:Colorpicker({ Title = "Hitbox Color", Default = Color3.fromRGB(255, 255, 255), Callback = function(c) hitboxColor = c end })
+
+Tabs.Baneable:Section({ Title = "Nose" })
+
+getgenv().ClanxitadosTargetPart = nil
+
+local SILENT_BULLET_SPEED = 99999  
+local SILENT_MAX_LEAD_VEL = 0       
+local SILENT_MIN_DIR = 5            
+
+local function predictSilentAimPosition(origin, target)
+    if not target or not target.Parent then return origin end
+    local pos = target.Position
+    local vel = target.AssemblyLinearVelocity
+    local speed = vel.Magnitude
+    if speed > SILENT_MAX_LEAD_VEL then
+        vel = vel.Unit * SILENT_MAX_LEAD_VEL
+    elseif speed < 1.25 then
+        return pos
+    end
+    local distance = (pos - origin).Magnitude
+    local travelTime = distance / SILENT_BULLET_SPEED
+    return pos + vel * travelTime
+end
+
+local function silentGetAimParts(character)
+    local parts = {}
+    if not character then return parts end
+    if silentAimTargetPart == "Cabeza" then
+        local head = character:FindFirstChild("Head")
+        if head and head:IsA("BasePart") then parts[1] = head end
+    elseif silentAimTargetPart == "Torso" then
+        for _, name in ipairs({ "UpperTorso", "Torso", "HumanoidRootPart" }) do
+            local p = character:FindFirstChild(name)
+            if p and p:IsA("BasePart") then parts[#parts + 1] = p end
+        end
+    else
+        for _, p in ipairs(character:GetChildren()) do
+            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then parts[#parts + 1] = p end
+        end
+        if #parts == 0 then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then parts[1] = hrp end
+        end
+    end
+    return parts
+end
+
+local function silentPartVisible(fromPos, part, myChar, enemyChar, params)
+    if not part then return false end
+    params.FilterDescendantsInstances = { myChar, enemyChar }
+    local hit = workspace:Raycast(fromPos, part.Position - fromPos, params)
+    if not hit then return true end
+    return hit.Instance and hit.Instance:IsDescendantOf(enemyChar)
+end
+
+local function findSilentTarget(useFov)
+    local char = player.Character
+    if not char then return nil end
+    local myRoot = char:FindFirstChild("HumanoidRootPart")
+    local myHead = char:FindFirstChild("Head")
+    if not myRoot then return nil end
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+    local fromPos = myHead and myHead.Position or myRoot.Position
+    local screenCenter = Vector2.new(cam.ViewportSize.X * 0.5, cam.ViewportSize.Y * 0.5)
+    local mousePos = UserInputService:GetMouseLocation()
+    local aimPoint = useFov and screenCenter or mousePos
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local bestPart, bestScore = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and esEnemigoValido(p) then
+            local eChar = p.Character
+            if eChar then
+                local parts = silentGetAimParts(eChar)
+                for i = 1, #parts do
+                    local part = parts[i]
+                    local pos2d, onScreen = cam:WorldToViewportPoint(part.Position)
+                    if onScreen and pos2d.Z > 0 then
+                        local screenDist = (aimPoint - Vector2.new(pos2d.X, pos2d.Y)).Magnitude
+                        if (not useFov) or (screenDist <= silentAimFovSize) then
+                            if silentPartVisible(fromPos, part, char, eChar, params) then
+                                local worldDist = (part.Position - fromPos).Magnitude
+                                local score = screenDist + worldDist * 0.02
+                                if score < bestScore then bestScore = score; bestPart = part end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestPart
+end
+
+local oldNamecall
+if hookmetamethod and getnamecallmethod and checkcaller then
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and getgenv().ClanxitadosTargetPart then
+            local target = getgenv().ClanxitadosTargetPart
+            if not (target and target.Parent) then
+                getgenv().ClanxitadosTargetPart = nil
+                return oldNamecall(self, ...)
+            end
+            if method == "Raycast" and self == workspace then
+                local origin, direction, p3 = ...
+                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude >= SILENT_MIN_DIR then
+                    local predicted = predictSilentAimPosition(origin, target)
+                    local newDir = (predicted - origin)
+                    if newDir.Magnitude > 0.001 then
+                        newDir = newDir.Unit * math.max(direction.Magnitude, 5000)
+                        return oldNamecall(self, origin, newDir, p3)
+                    end
+                end
+            elseif self == workspace and typeof(method) == "string" and method:sub(1, 13) == "FindPartOnRay" then
+                local ray, p2, p3, p4 = ...
+                if typeof(ray) == "Ray" and ray.Direction.Magnitude >= SILENT_MIN_DIR then
+                    local predicted = predictSilentAimPosition(ray.Origin, target)
+                    local newDir = (predicted - ray.Origin)
+                    if newDir.Magnitude > 0.001 then
+                        newDir = newDir.Unit * math.max(ray.Direction.Magnitude, 5000)
+                        local newRay = Ray.new(ray.Origin, newDir)
+                        return oldNamecall(self, newRay, p2, p3, p4)
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+else
+    warn("Hook de raycast no disponible en este entorno.")
+end
+
+task.spawn(function()
+    while task.wait(0.03) do
+        local wantSilent = (silentAimManualEnabled or silentAimFovEnabled) and not estaEnLobby()
+        if not wantSilent then
+            if not autoShootEnabled and not autoShootAgresivoEnabled then getgenv().ClanxitadosTargetPart = nil end
+            continue
+        end
+        local part = nil
+        if silentAimFovEnabled then part = findSilentTarget(true)
+        elseif silentAimManualEnabled then part = findSilentTarget(false) end
+        if part then
+            getgenv().ClanxitadosTargetPart = part
+        else
+            if not autoShootEnabled and not autoShootAgresivoEnabled then getgenv().ClanxitadosTargetPart = nil end
+        end
+    end
+end)
+
+task.spawn(function()
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    while task.wait(0.1) do
+        local wantAuto = autoShootEnabled or autoShootAgresivoEnabled
+        if not wantAuto or estaEnLobby() then
+            if not autoShootEnabled and not autoShootAgresivoEnabled then getgenv().ClanxitadosTargetPart = nil end
+            continue
+        end
+        if shootBusy then continue end
+        local char = player.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not hum or hum.Health <= 0 or not root then continue end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool or not esPistola(tool) or not tool:FindFirstChild("Handle") then getgenv().ClanxitadosTargetPart = nil; continue end
+        if estaRecargando(tool) then getgenv().ClanxitadosTargetPart = nil; continue end
+        local head = char:FindFirstChild("Head")
+        local headPos = head and head.Position or root.Position
+        local myPos = root.Position
+        local closestPart, shortestDist = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and isEnemy(p) and p.Character then
+                local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
+                if enemyHum and enemyHum.Health > 0 then
+                    params.FilterDescendantsInstances = { char, p.Character }
+                    local function ProcesarParte(part)
+                        local dist = (part.Position - myPos).Magnitude
+                        if dist >= shortestDist then return end
+                        local size = part.Size
+                        local offsets = { Vector3.zero, Vector3.new(0, size.Y / 2.1, 0), Vector3.new(0, -size.Y / 2.1, 0) }
+                        for _, offset in ipairs(offsets) do
+                            if not workspace:Raycast(headPos, (part.CFrame * offset) - headPos, params) then
+                                shortestDist = dist; closestPart = part; return
+                            end
+                        end
+                    end
+                    if autoShootAgresivoEnabled or autoShootTargetPart == "Cuerpo Completo" then
+                        for _, part in ipairs(p.Character:GetChildren()) do
+                            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then ProcesarParte(part) end
+                        end
+                    elseif autoShootTargetPart == "Cabeza" then
+                        local h = p.Character:FindFirstChild("Head")
+                        if h and h:IsA("BasePart") then ProcesarParte(h) end
+                    else
+                        for _, name in ipairs({ "UpperTorso", "Torso", "HumanoidRootPart" }) do
+                            local part = p.Character:FindFirstChild(name)
+                            if part and part:IsA("BasePart") then ProcesarParte(part) end
+                        end
+                    end
+                end
+            end
+        end
+        if not closestPart then getgenv().ClanxitadosTargetPart = nil; continue end
+        if os.clock() - lastShootTime < SHOOT_COOLDOWN then continue end
+        shootBusy = true
+        getgenv().ClanxitadosTargetPart = closestPart
+        pcall(shootOnce, char, hum)
+        lastShootTime = os.clock()
+        task.wait(SHOOT_DEACTIVATE_DELAY)
+        shootBusy = false
+    end
+end)
+
+UIElements.BtnKillAura = Tabs.Baneable:Button({ Title = "Kill Aura", Callback = function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/dgz-hub/free/refs/heads/main/KillAura"))() end) end })
+UIElements.BtnMenuAutoKill = Tabs.Baneable:Button({ Title = "Auto Kill", Callback = function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/dgz-hub/free/refs/heads/main/killall"))() end) end })
+UIElements.BtnPlataforma = Tabs.Baneable:Button({ Title = "Plataforma", Callback = function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/dgz-hub/free/refs/heads/main/Plataforma"))() end) end })
+UIElements.BtnSkinchanger = Tabs.Baneable:Button({ Title = "Skinchanger", Callback = function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/dgz-hub/free/refs/heads/main/SkinChanger"))() end) end })
+UIElements.BtnInvisibilidad = Tabs.Baneable:Button({ Title = "Invisibilidad", Callback = function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/dgz-hub/free/refs/heads/main/invisibilidad"))() end) end })
+
+local function startVisualFreezeEffect()
+    local FREEZE_SOUND_ID = "rbxassetid://6092902279"
+    local SOUND_VOLUME = 1
+    local FREEZE_COLOR = Color3.fromRGB(135, 206, 250)
+    local BODY_MATERIAL = Enum.Material.SmoothPlastic
+    local INCLUDE_NPCS = true
+    local PLAYER_FREEZE_TIME = 0
+    local NPC_FREEZE_TIME = 10
+    local POSE_LAG = 0.1
+    local SAMPLE_RANGE = 600
+    local CAUSE_WINDOW = 1.5
+    local AIM_ANGLE = 8
+    local AIM_RADIUS = 6
+    local AIM_MAX_DIST = 400
+    local MELEE_RANGE = 12
+    local STAT_WINDOW = 2
+    local STAT_WINDOW_UNAIMED = 0.8
+    local INSTANT_ON_AIM = true
+    local INSTANT_WINDOW = 0.6
+    local ATTACK_KEYS = {}
+    local DEBUG = false
+    local SoundService = game:GetService("SoundService")
+    local ContentProvider = game:GetService("ContentProvider")
+    local LocalPlayer = player
+    local function weak() return setmetatable({}, {__mode = "k"}) end
+    local freezeOn = true
+    local closed = false
+    local connections = {}
+    local humanoids = {}
+    local hooked = weak()
+    local handled = weak()
+    local lastTag = weak()
+    local rings = weak()
+    local partsOf = weak()
+    local dirty = weak()
+    local frozen = {}
+    local active = {}
+    local attacks = {}
+    local pending = {}
+    local statEvents = {}
+    local statValues = {}
+    local attrWatched = {}
+    local clearAll
+    local function track(c) table.insert(connections, c); return c end
+    local env = (type(getgenv) == "function" and getgenv()) or _G
+    if type(env.__FreezeKillStop) == "function" then pcall(env.__FreezeKillStop) end
+    local function shutdown()
+        if closed then return end
+        closed = true; freezeOn = false
+        if clearAll then pcall(clearAll) end
+        for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+        table.clear(connections)
+    end
+    env.__FreezeKillStop = shutdown
+    local initOk, initErr = pcall(function()
+        for _, id in ipairs({FREEZE_SOUND_ID}) do
+            if id ~= "" then task.spawn(function() local s = Instance.new("Sound"); s.SoundId = id; pcall(function() ContentProvider:PreloadAsync({s}) end); s:Destroy() end) end
+        end
+        local function playSound(id)
+            if not id or id == "" then return end
+            local s = Instance.new("Sound"); s.SoundId = id; s.Volume = SOUND_VOLUME; s.Parent = SoundService; s:Play()
+            task.delay(10, function() s:Destroy() end)
+        end
+        local RING = 12
+        local function refreshParts(hum)
+            local model = hum.Parent; local list = {}
+            if model then for _, d in ipairs(model:GetDescendants()) do if d:IsA("BasePart") then list[#list + 1] = d end end end
+            partsOf[hum] = list; dirty[hum] = nil
+        end
+        track(RunService.Heartbeat:Connect(function()
+            local now = tick(); local cam = workspace.CurrentCamera; local camPos = cam and cam.CFrame.Position
+            for hum in pairs(humanoids) do
+                if hum.Parent and hum.Health > 0 then
+                    local root = hum.RootPart
+                    if not (root and camPos and (root.Position - camPos).Magnitude > SAMPLE_RANGE) then
+                        if dirty[hum] or not partsOf[hum] then refreshParts(hum) end
+                        local list = partsOf[hum]; local r = rings[hum]
+                        if not r then r = {i = 0, slots = {}}; for k = 1, RING do r.slots[k] = {t = 0, cf = weak()} end; rings[hum] = r end
+                        r.i = r.i % RING + 1; local slot = r.slots[r.i]; slot.t = now; local cf = slot.cf
+                        for k = 1, #list do local p = list[k]; cf[p] = p.CFrame end
+                    end
+                end
+            end
+        end))
+        local function getPose(hum, diedAt)
+            local r = rings[hum]; if not r then return nil end
+            local target = diedAt - POSE_LAG; local best, bestT
+            for _, s in ipairs(r.slots) do if s.t > 0 and s.t <= target and (not bestT or s.t > bestT) then best, bestT = s, s.t end end
+            if not best then for _, s in ipairs(r.slots) do if s.t > 0 and (not bestT or s.t < bestT) then best, bestT = s, s.t end end end
+            if not best or bestT < diedAt - 1.5 then return nil end
+            local copy = {}; for p, cf in pairs(best.cf) do copy[p] = cf end; return copy
+        end
+        local function paintModel(model, undo, color)
+            local function add(fn) undo[#undo + 1] = fn end
+            for _, d in ipairs(model:GetDescendants()) do
+                pcall(function()
+                    if d:IsA("BasePart") then
+                        local tr, col, mat, ref = d.Transparency, d.Color, d.Material, d.Reflectance
+                        local tex = d:IsA("MeshPart") and d.TextureID or nil
+                        if tr > 0 and tr < 1 then d.Transparency = 0 end
+                        d.Color = color; d.Material = BODY_MATERIAL; d.Reflectance = 0
+                        if tex ~= nil then d.TextureID = "" end
+                        add(function() d.Transparency = tr; d.Color = col; d.Material = mat; d.Reflectance = ref; if tex ~= nil then d.TextureID = tex end end)
+                    elseif d:IsA("SpecialMesh") then
+                        local tex, vc = d.TextureId, d.VertexColor; d.TextureId = ""; d.VertexColor = Vector3.new(1,1,1)
+                        add(function() d.TextureId = tex; d.VertexColor = vc end)
+                    elseif d:IsA("Shirt") or d:IsA("Pants") or d:IsA("ShirtGraphic") or d:IsA("BodyColors") or d:IsA("SurfaceAppearance") or d:IsA("Decal") or d:IsA("Texture") or d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") or d:IsA("Highlight") then
+                        local parent = d.Parent; d.Parent = nil; add(function() d.Parent = parent end)
+                    end
+                end)
+            end
+        end
+        local function makeBackup(model)
+            local clone; pcall(function() model.Archivable = true; clone = model:Clone() end)
+            if not clone then return nil end
+            for _, d in ipairs(clone:GetDescendants()) do
+                if d:IsA("Humanoid") or d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Sound") or d:IsA("ForceField") or d:IsA("Animator") then d:Destroy() end
+            end
+            for _, d in ipairs(clone:GetDescendants()) do
+                if d:IsA("BasePart") then d.Anchored = true; d.CanCollide = false; d.CanQuery = false; d.CanTouch = false end
+            end
+            clone.Name = "FrozenBody"; return clone
+        end
+        local byVictim = weak()
+        local function applyEffect(model, pose, hum, plr, opts)
+            if hum.Health > 0 or not model.Parent then return function() end end
+            local key = plr or model; local oldFx = byVictim[key]; if oldFx then pcall(oldFx) end
+            local rec = opts.freeze and {model = model, saved = {}} or nil
+            local undo = {}; local conns = {}; local done, backup = false, nil; local color = FREEZE_COLOR
+            if rec then
+                for _, d in ipairs(model:GetDescendants()) do
+                    if d:IsA("JointInstance") or d:IsA("WeldConstraint") then pcall(function() if d.Enabled then d.Enabled = false; undo[#undo + 1] = function() d.Enabled = true end end end) end
+                end
+                for _, d in ipairs(model:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        local cf = (pose and pose[d]) or d.CFrame; rec.saved[d] = cf; local was = d.Anchored
+                        d.Anchored = true; d.AssemblyLinearVelocity = Vector3.zero; d.AssemblyAngularVelocity = Vector3.zero; d.CFrame = cf
+                        undo[#undo + 1] = function() d.Anchored = was end
+                    end
+                end
+            end
+            paintModel(model, undo, color)
+            if rec then active[rec] = true end
+            pcall(function()
+                for _, s in ipairs(model:GetDescendants()) do if s:IsA("Sound") then s.Volume = 0; s:Stop() end end
+                local env = (type(getgenv) == "function" and getgenv()) or _G
+                if type(env.ClanxitadosMuteOriginalKillSounds) == "function" then env.ClanxitadosMuteOriginalKillSounds(model) end
+            end)
+            playSound(FREEZE_SOUND_ID)
+            local cleanup
+            cleanup = function()
+                if done then return end; done = true
+                if rec then active[rec] = nil end
+                if byVictim[key] == cleanup then byVictim[key] = nil end
+                for i = #frozen, 1, -1 do if frozen[i] == cleanup then table.remove(frozen, i); break end end
+                for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+                if backup then backup:Destroy() end
+                for i = #undo, 1, -1 do pcall(undo[i]) end
+            end
+            if rec then
+                local function onGone()
+                    if done or backup then return end
+                    for part, cf in pairs(rec.saved) do if part.Parent then pcall(function() part.CFrame = cf end) end end
+                    backup = makeBackup(model)
+                    if backup then task.defer(function() if not done and backup then backup.Parent = workspace end end) end
+                end
+                table.insert(conns, model.Destroying:Connect(onGone))
+                table.insert(conns, model.AncestryChanged:Connect(function() if not model:IsDescendantOf(workspace) then onGone() end end))
+            end
+            table.insert(conns, hum.HealthChanged:Connect(function(h) if h > 0 then cleanup() end end))
+            if plr then
+                table.insert(conns, plr.CharacterAdded:Connect(function(c) if c ~= model then cleanup() end end))
+                table.insert(conns, plr.AncestryChanged:Connect(function() if not plr.Parent then cleanup() end end))
+            end
+            local life = opts.freeze and (plr and PLAYER_FREEZE_TIME or NPC_FREEZE_TIME) or 0
+            if life > 0 then task.delay(life, cleanup) end
+            byVictim[key] = cleanup; table.insert(frozen, cleanup)
+            task.spawn(function()
+                while not done and not closed do
+                    task.wait(0.25); if done or closed then break end
+                    local respawned = false
+                    if plr then
+                        local ch = plr.Character
+                        if not plr.Parent then respawned = true
+                        elseif ch ~= nil and ch ~= model then respawned = true
+                        elseif hum.Parent and hum.Health > 0 then respawned = true end
+                    elseif hum.Parent and hum.Health > 0 then respawned = true end
+                    if respawned then cleanup(); break end
+                end
+            end)
+            return cleanup
+        end
+        local function trigger(model, pose, hum, plr)
+            if not freezeOn then return function() end end
+            return applyEffect(model, pose, hum, plr, {freeze = true})
+        end
+        track(RunService.RenderStepped:Connect(function()
+            for rec in pairs(active) do
+                if rec.model.Parent then
+                    for part, cf in pairs(rec.saved) do if part.Parent and part.CFrame ~= cf then part.CFrame = cf end end
+                end
+            end
+        end))
+        function clearAll()
+            while #frozen > 0 do local fn = table.remove(frozen); pcall(fn) end
+            for _, d in ipairs(pending) do d.resolved = true end
+            table.clear(pending)
+        end
+        local TAG_NAMES = {"creator","Creator","killer","Killer","lastDamager","LastDamager","lastAttacker","LastAttacker"}
+        local TAG_SET = {}; for _, n in ipairs(TAG_NAMES) do TAG_SET[n] = true end
+        local attackKeySet = {}; for _, k in ipairs(ATTACK_KEYS) do attackKeySet[k] = true end
+        local function matchesMe(v)
+            local t = typeof(v)
+            if t == "Instance" then if v == LocalPlayer then return true end; local myChar = LocalPlayer.Character; return myChar ~= nil and (v == myChar or v:IsDescendantOf(myChar))
+            elseif t == "string" then return v == LocalPlayer.Name or v == LocalPlayer.DisplayName or v == tostring(LocalPlayer.UserId)
+            elseif t == "number" then return v == LocalPlayer.UserId end
+            return false
+        end
+        local function readTag(hum)
+            local model = hum.Parent
+            for _, name in ipairs(TAG_NAMES) do
+                local obj = hum:FindFirstChild(name) or (model and model:FindFirstChild(name))
+                if obj and obj:IsA("ValueBase") then local v = obj.Value; if v ~= nil and v ~= "" and v ~= 0 then return true, matchesMe(v) end end
+                local a = hum:GetAttribute(name); if a == nil and model then a = model:GetAttribute(name) end
+                if a ~= nil and a ~= "" and a ~= 0 then return true, matchesMe(a) end
+            end
+            return false, false
+        end
+        local function recordTag(hum) local known, mine = readTag(hum); if known then lastTag[hum] = {mine = mine, t = tick()} end end
+        local function isKillStat(name)
+            name = name:lower()
+            if name:find("death") or name:find("assist") then return false end
+            return name:find("kill") ~= nil or name:find("elim") ~= nil or name:find("frag") ~= nil or name:find("takedown") ~= nil or name == "ko" or name == "kos"
+        end
+        local function hasStats() return next(statValues) ~= nil or next(attrWatched) ~= nil end
+        local resolveStats
+        local function addStatEvent(src, delta)
+            local t = tick()
+            for i = #statEvents, 1, -1 do local e = statEvents[i]; if t - e.t <= 0.25 and not e.src[src] then e.src[src] = true; return end end
+            statEvents[#statEvents + 1] = {t = t, n = delta, src = {[src] = true}}; resolveStats()
+        end
+        local function watchStat(v)
+            if statValues[v] then return end
+            if not (v:IsA("IntValue") or v:IsA("NumberValue")) or not isKillStat(v.Name) then return end
+            statValues[v] = true; local prev = v.Value
+            track(v.Changed:Connect(function(new) if new > prev then addStatEvent(v, math.max(1, math.floor(new - prev + 0.5))) end; prev = new end))
+        end
+        local function watchAttr(name)
+            if attrWatched[name] or type(name) ~= "string" or not isKillStat(name) then return end
+            local val = LocalPlayer:GetAttribute(name); if type(val) ~= "number" then return end
+            attrWatched[name] = true; local prev = val
+            track(LocalPlayer:GetAttributeChangedSignal(name):Connect(function()
+                local new = LocalPlayer:GetAttribute(name); if type(new) ~= "number" then return end
+                if new > prev then addStatEvent(name, math.max(1, math.floor(new - prev + 0.5))) end; prev = new
+            end))
+        end
+        local function scanStats()
+            local ls = LocalPlayer:FindFirstChild("leaderstats")
+            if ls then for _, v in ipairs(ls:GetDescendants()) do watchStat(v) end end
+            for name in pairs(LocalPlayer:GetAttributes()) do watchAttr(name) end
+        end
+        local function markShot(pos)
+            local cam = workspace.CurrentCamera; if not cam then return end
+            local t0 = tick(); local lastA = attacks[#attacks]; if lastA and t0 - lastA.t < 0.03 then return end
+            local myChar = LocalPlayer.Character; local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local aimDirs = {cam.CFrame.LookVector}
+            if pos then table.insert(aimDirs, cam:ScreenPointToRay(pos.X, pos.Y).Direction)
+            else local m = UserInputService:GetMouseLocation(); table.insert(aimDirs, cam:ViewportPointToRay(m.X, m.Y).Direction) end
+            local origin = cam.CFrame.Position
+            local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances = myChar and {myChar} or {}
+            local cands = {}
+            for hum in pairs(humanoids) do
+                local model = hum.Parent
+                if model and model ~= myChar and hum.Health > 0 then
+                    local root = hum.RootPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+                    if root then
+                        local to = root.Position - origin; local dist = to.Magnitude
+                        if dist > 0.1 and dist <= AIM_MAX_DIST then
+                            local dir = to.Unit; local bestCos = -1
+                            for _, v in ipairs(aimDirs) do bestCos = math.max(bestCos, v:Dot(dir)) end
+                            local tol = math.min(AIM_ANGLE, math.max(1.5, math.deg(math.atan2(AIM_RADIUS, dist))))
+                            local close = myRoot and (root.Position - myRoot.Position).Magnitude <= MELEE_RANGE
+                            if bestCos >= math.cos(math.rad(tol)) or close then
+                                local hit = workspace:Raycast(origin, to + dir * 2, params)
+                                if hit and hit.Instance:IsDescendantOf(model) then cands[#cands + 1] = {model = model, cos = bestCos} end
+                            end
+                        end
+                    end
+                end
+            end
+            table.sort(cands, function(x, y) return x.cos > y.cos end)
+            local keep = {}; for i = 1, math.min(2, #cands) do keep[cands[i].model] = i end
+            attacks[#attacks + 1] = {t = t0, cands = keep}; if #attacks > 30 then table.remove(attacks, 1) end
+        end
+        local function causedByMe(model, diedAt)
+            local aimed, strong = false, false
+            for i = #attacks, 1, -1 do
+                local a = attacks[i]; if diedAt - a.t > CAUSE_WINDOW then break end
+                local rank = a.cands[model]; if rank then aimed = true; if rank == 1 and diedAt - a.t <= INSTANT_WINDOW then strong = true end end
+            end
+            return aimed, strong
+        end
+        local function confirmKill(d) d.resolved = true; if not d.cancel then d.cancel = trigger(d.model, d.pose, d.hum, d.player) end end
+        local function expire(d) if d.resolved then return end; d.resolved = true; if d.cancel then d.cancel() end end
+        function resolveStats()
+            local tNow = tick()
+            for i = #statEvents, 1, -1 do local e = statEvents[i]; if e.n <= 0 or tNow - e.t > STAT_WINDOW * 2 then table.remove(statEvents, i) end end
+            for i = #pending, 1, -1 do local d = pending[i]; if d.resolved and tNow - d.t > 5 then table.remove(pending, i) end end
+            while true do
+                local bestE, bestD, bestCost
+                for _, e in ipairs(statEvents) do
+                    if e.n > 0 then
+                        for _, d in ipairs(pending) do
+                            if not d.resolved then
+                                local dt = math.abs(e.t - d.t); local limit = d.aimed and STAT_WINDOW or STAT_WINDOW_UNAIMED
+                                if dt <= limit then local cost = dt + (d.aimed and 0 or 1); if not bestCost or cost < bestCost then bestE, bestD, bestCost = e, d, cost end end
+                            end
+                        end
+                    end
+                end
+                if not bestE then break end; bestE.n = bestE.n - 1; confirmKill(bestD)
+            end
+        end
+        local function onDied(hum, model)
+            if not freezeOn or handled[hum] then return end; handled[hum] = true
+            local plr = Players:GetPlayerFromCharacter(model); if plr == LocalPlayer then return end
+            local diedAt = tick(); local pose = getPose(hum, diedAt); local known, mine = readTag(hum)
+            if not known then local lt = lastTag[hum]; if lt and diedAt - lt.t <= 15 then known, mine = true, lt.mine end end
+            if known then if mine then trigger(model, pose, hum, plr) end; return end
+            scanStats(); local aimed, strong = causedByMe(model, diedAt)
+            if not hasStats() then if aimed then trigger(model, pose, hum, plr) end; return end
+            local d = {hum = hum, model = model, player = plr, pose = pose, t = diedAt, aimed = aimed, label = model.Name, resolved = false}
+            pending[#pending + 1] = d
+            if INSTANT_ON_AIM and strong then d.cancel = trigger(model, pose, hum, plr) end
+            task.delay((aimed and STAT_WINDOW or STAT_WINDOW_UNAIMED) + 0.1, function() expire(d) end)
+            resolveStats()
+        end
+        local function hookHumanoid(hum)
+            if hooked[hum] then return end; local model = hum.Parent
+            if not model or not model:IsA("Model") then return end
+            if Players:GetPlayerFromCharacter(model) == LocalPlayer then return end
+            if not INCLUDE_NPCS and not Players:GetPlayerFromCharacter(model) then return end
+            hooked[hum] = true; humanoids[hum] = true; dirty[hum] = true
+            local function watchTagObj(c)
+                if TAG_SET[c.Name] and c:IsA("ValueBase") then recordTag(hum); track(c.Changed:Connect(function() recordTag(hum) end)) end
+            end
+            for _, c in ipairs(hum:GetChildren()) do watchTagObj(c) end
+            track(hum.ChildAdded:Connect(watchTagObj))
+            track(hum.AttributeChanged:Connect(function(n) if TAG_SET[n] then recordTag(hum) end end))
+            local lastHealth = hum.Health
+            track(hum.HealthChanged:Connect(function(h)
+                if h < lastHealth then recordTag(hum) end
+                if h > 0 then handled[hum] = nil; if lastHealth <= 0 then lastTag[hum] = nil end
+                elseif lastHealth > 0 then onDied(hum, hum.Parent or model) end
+                lastHealth = h
+            end))
+            track(hum.Died:Connect(function() onDied(hum, hum.Parent or model) end))
+            track(model.DescendantAdded:Connect(function(d) if d:IsA("BasePart") then dirty[hum] = true end end))
+            track(model.DescendantRemoving:Connect(function(d) if d:IsA("BasePart") then dirty[hum] = true end end))
+            track(hum.AncestryChanged:Connect(function()
+                if hum:IsDescendantOf(workspace) then humanoids[hum] = true; dirty[hum] = true else humanoids[hum] = nil end
+            end))
+        end
+        for _, d in ipairs(workspace:GetDescendants()) do if d:IsA("Humanoid") then hookHumanoid(d) end end
+        track(workspace.DescendantAdded:Connect(function(d) if d:IsA("Humanoid") then task.defer(hookHumanoid, d) end end))
+        local function hookTool(t) if t:IsA("Tool") then track(t.Activated:Connect(function() markShot() end)) end end
+        local function hookMyChar(char) for _, c in ipairs(char:GetChildren()) do hookTool(c) end; track(char.ChildAdded:Connect(hookTool)) end
+        if LocalPlayer.Character then hookMyChar(LocalPlayer.Character) end
+        track(LocalPlayer.CharacterAdded:Connect(hookMyChar))
+        track(UserInputService.InputBegan:Connect(function(input, gp)
+            local t = input.UserInputType
+            if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then markShot(Vector2.new(input.Position.X, input.Position.Y)) end
+            if input.KeyCode == Enum.KeyCode.ButtonR2 then markShot()
+            elseif not gp and attackKeySet[input.KeyCode] then markShot() end
+        end))
+        scanStats()
+        track(LocalPlayer.ChildAdded:Connect(function(c)
+            if c.Name == "leaderstats" then task.wait(0.5); scanStats(); track(c.DescendantAdded:Connect(watchStat)) end
+        end))
+        track(LocalPlayer.AttributeChanged:Connect(watchAttr))
+    end)
+    if not initOk then warn("[Freeze] ERROR: " .. tostring(initErr)) end
+end
+
+local visualFreezeEnabled = false
+local Debris = game:GetService("Debris")
+
+local KillFX = { Enabled = false, Style = "Interstellar", Folder = nil, Seen = setmetatable({}, { __mode = "k" }) }
+
+local FX_CATALOG = {
+    { "Freeze Kill" }, { "Interstellar", "PreviewEffects", "InterstellarEffect" }, { "Pumpking", "PreviewEffects", "PumpkingEffect" },
+    { "Jelly rojo", "Effects", "RedJelly" }, { "Jelly azul", "Effects", "BlueJelly" }, { "Jelly morado", "Effects", "PurpleJelly" },
+    { "Jelly verde", "Effects", "GreenJelly" }, { "Agujero negro", "Effects", "BlackholeEffect" }, { "Venom", "Effects", "VenomEffect" },
+    { "UFO", "Effects", "UFOEffect" }, { "Cohete", "Effects", "RocketEffect" }, { "Luna roja", "Effects", "BloodmoonEffect" },
+    { "Jack-o-lantern", "Effects", "JackoLanternEffect" }, { "Soul Reaper", "Effects", "SoulReaper" }, { "Humo", "Effects", "SmokeEffect" },
+    { "Hierba morada", "Effects", "PurpleGrass" }, { "Fantasmas", "Effects", "GhostHauntEffect" }, { "Splash", "Effects", "SplashEffect" },
+    { "Noche tenebrosa", "Effects", "SpookyNightEffect" }, { "Destello dorado" }, { "Destello helado" },
+}
+
+local FX_NAMES = {}; local FX_BY_NAME = {}
+for _, e in ipairs(FX_CATALOG) do table.insert(FX_NAMES, e[1]); FX_BY_NAME[e[1]] = e end
+
+local FX_PRESETS = {
+    ["Jack-o-lantern"] = { Color3.fromRGB(255, 125, 25), "sparkles_main.dds", 0.7, 8 },
+    ["Soul Reaper"] = { Color3.fromRGB(120, 255, 190), "smoke_main.dds", 1.3, 4 },
+    ["Humo"] = { Color3.fromRGB(190, 190, 190), "smoke_main.dds", 1.8, 3 },
+    ["Hierba morada"] = { Color3.fromRGB(185, 70, 255), "sparkles_main.dds", 0.6, 5 },
+    ["Fantasmas"] = { Color3.fromRGB(195, 235, 255), "smoke_main.dds", 1.5, 5 },
+    ["Splash"] = { Color3.fromRGB(65, 180, 255), "sparkles_main.dds", 0.5, 12 },
+    ["Destello dorado"] = { Color3.fromRGB(255, 190, 45), "sparkles_main.dds", 0.4, 9 },
+    ["Destello helado"] = { Color3.fromRGB(100, 220, 255), "sparkles_main.dds", 0.4, 9 },
+}
+
+local function ensureKillFXFolder()
+    if KillFX.Folder and KillFX.Folder.Parent then return KillFX.Folder end
+    local f = workspace:FindFirstChild("ClanxitadosKillFX")
+    if not f then f = Instance.new("Folder"); f.Name = "ClanxitadosKillFX"; f.Parent = workspace end
+    KillFX.Folder = f; return f
+end
+
+local function clearKillFX() local f = KillFX.Folder; if f then for _, v in ipairs(f:GetChildren()) do v:Destroy() end end end
+
+local function stopFreezeEffect()
+    visualFreezeEnabled = false
+    local env = (type(getgenv) == "function" and getgenv()) or _G
+    if type(env.__FreezeKillStop) == "function" then pcall(env.__FreezeKillStop) end
+end
+
+local function startFreezeEffectIfNeeded()
+    if KillFX.Enabled and KillFX.Style == "Freeze Kill" then visualFreezeEnabled = true; pcall(startVisualFreezeEffect)
+    else stopFreezeEffect() end
+end
+
+local function killFXSource(entry)
+    local skins = ReplicatedStorage:FindFirstChild("ReplicatedSkins")
+    local group = skins and entry[2] and skins:FindFirstChild(entry[2]); if not group then return nil end
+    local asset = group:FindFirstChild(entry[3])
+    if not asset and entry[3] == "SmokeEffect" then asset = group:FindFirstChild("YellowSmoke") end
+    return asset
+end
+
+local function emitKillFX(body, killer)
+    if not KillFX.Enabled then return end; if KillFX.Style == "Freeze Kill" then return end; if killer ~= player then return end
+    if typeof(body) ~= "Instance" or not body:IsA("Model") then return end; if KillFX.Seen[body] then return end
+    local root = body:FindFirstChild("HumanoidRootPart") or body:FindFirstChildWhichIsA("BasePart", true); if not root then return end
+    local entry = FX_BY_NAME[KillFX.Style]; if not entry then return end
+    local folder = ensureKillFXFolder(); local source = killFXSource(entry); KillFX.Seen[body] = true
+    local active = folder:GetChildren(); if #active >= 3 then active[1]:Destroy() end
+    local anchor = Instance.new("Part"); anchor.Name = "Burst"; anchor.Size = Vector3.new(0.1,0.1,0.1); anchor.CFrame = root.CFrame
+    anchor.Anchored = true; anchor.Transparency = 1; anchor.CanCollide = false; anchor.CanTouch = false; anchor.CanQuery = false; anchor.CastShadow = false
+    anchor.Parent = folder; Debris:AddItem(anchor, 4)
+    if entry[4] then
+        local frozen = Instance.new("Model"); frozen.Name = tostring(entry[3] or "Frozen"); frozen.Parent = anchor; local parts = 0
+        for _, part in ipairs(body:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Transparency < 1 then
+                local ok, clone = pcall(function() return part:Clone() end)
+                if ok and clone then
+                    for _, child in ipairs(clone:GetDescendants()) do if not child:IsA("DataModelMesh") then child:Destroy() end end
+                    clone.Anchored = true; clone.CanCollide = false; clone.CanTouch = false; clone.CanQuery = false
+                    clone.Color = entry[4]; clone.Material = Enum.Material.SmoothPlastic; clone.LocalTransparencyModifier = 0
+                    if clone:IsA("MeshPart") then clone.TextureID = "" end
+                    for _, child in ipairs(clone:GetChildren()) do if child:IsA("SpecialMesh") then child.TextureId = "" end end
+                    clone.Parent = frozen; parts = parts + 1; if parts >= 20 then break end
+                end
+            end
+        end
+    end
+    local count = 0
+    if source then
+        for _, p in ipairs(source:GetDescendants()) do
+            if p:IsA("ParticleEmitter") then
+                local clone = p:Clone(); clone:ClearAllChildren(); clone.Enabled = false; clone.Rate = 0
+                clone.Lifetime = NumberRange.new(math.min(clone.Lifetime.Min, 2), math.min(clone.Lifetime.Max, 3))
+                clone.Parent = anchor; clone:Emit(8); count = count + 1; if count >= 16 then break end
+            end
+        end
+    end
+    if count == 0 and not entry[4] then
+        local preset = FX_PRESETS[entry[1]] or FX_PRESETS["Destello helado"]
+        local p = Instance.new("ParticleEmitter"); p.Enabled = false; p.Rate = 0
+        p.Texture = "rbxasset://textures/particles/" .. preset[2]; p.Color = ColorSequence.new(preset[1]); p.LightEmission = 0.8
+        p.Lifetime = NumberRange.new(0.6, 1.5); p.Speed = NumberRange.new(preset[4] * 0.5, preset[4]); p.SpreadAngle = Vector2.new(180,180)
+        p.Size = NumberSequence.new(preset[3]); p.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,1)})
+        p.Parent = anchor; p:Emit(35)
+    end
+end
+
+do
+    local Packages = ReplicatedStorage:FindFirstChild("Packages")
+    local Network = Packages and Packages:FindFirstChild("Networking")
+    local Event = Network and Network:FindFirstChild("RE/Combat/DestroyBody")
+    if Event and Event:IsA("RemoteEvent") then
+        Event.OnClientEvent:Connect(function(_, body, killer) emitKillFX(body, killer) end)
+    else
+        task.spawn(function()
+            local packages = ReplicatedStorage:FindFirstChild("Packages") or ReplicatedStorage:WaitForChild("Packages", 10); if not packages then return end
+            local networking = packages:FindFirstChild("Networking") or packages:WaitForChild("Networking", 10); if not networking then return end
+            local event = networking:FindFirstChild("RE/Combat/DestroyBody") or networking:WaitForChild("RE/Combat/DestroyBody", 10)
+            if event and event:IsA("RemoteEvent") then event.OnClientEvent:Connect(function(_, body, killer) emitKillFX(body, killer) end) end
+        end)
+    end
+end
+
+Tabs.Extras:Section({ Title = "Efectos" })
+UIElements.TogKillFX = Tabs.Extras:Toggle({ Title = "Activar Efectos De Muerte", Desc = "equipa el efecto predeterminado antes de usarlo", Value = false, Callback = function(enabled) KillFX.Enabled = enabled == true; if not enabled then clearKillFX(); stopFreezeEffect() else startFreezeEffectIfNeeded() end end })
+UIElements.DropEfectos = Tabs.Extras:Dropdown({ Title = "Efectos", Values = FX_NAMES, Value = "Interstellar", Callback = function(Value) KillFX.Style = Value; if KillFX.Enabled then if Value == "Freeze Kill" then startFreezeEffectIfNeeded() else stopFreezeEffect() end end end })
+
+local KillSounds = {
+    ["Sword Hit"] = 140462043853173, ["TF2"] = 2866718318, ["SpongeBob Laugh"] = 271580013,
+    ["Monster Kill"] = 74959901252990, ["Insta Kill"] = 131961137, ["Fahh"] = 72298953503422,
+    ["Ez"] = 8922169253, ["Among Us"] = 7227567562, ["Mambo"] = 138707899268973, ["Sata Andagi"] = 109412872124861,
+}
+local SoundVolumes = { ["Sword Hit"]=5,["TF2"]=4.5,["SpongeBob Laugh"]=5.5,["Monster Kill"]=4,["Insta Kill"]=4.5,["Fahh"]=4,["Ez"]=5,["Among Us"]=3.5,["Mambo"]=3.5,["Sata Andagi"]=3.5 }
+local SOUNDS = {}
+for name, id in pairs(KillSounds) do table.insert(SOUNDS, { Name = name, Id = "rbxassetid://" .. tostring(id), Volume = SoundVolumes[name] or 3.5 }) end
+table.sort(SOUNDS, function(a, b) return a.Name < b.Name end)
+local selectedIndex = 1
+for i, sound in ipairs(SOUNDS) do if sound.Name == "Sata Andagi" then selectedIndex = i; break end end
+local soundEnabled = false
+local playerSound = Instance.new("Sound"); playerSound.Name = "XitadosKillSound"; playerSound.SoundId = SOUNDS[selectedIndex].Id; playerSound.Volume = SOUNDS[selectedIndex].Volume; playerSound.Parent = SoundService
+pcall(function() ContentProvider:PreloadAsync({ playerSound }) end)
+local lastPlay = 0; local PLAY_COOLDOWN = 0.01
+local function playKillSound()
+    if not soundEnabled then return end; local now = os.clock(); if now - lastPlay < PLAY_COOLDOWN then return end; lastPlay = now
+    task.spawn(function()
+        local s = playerSound:Clone(); s.Name = "XitadosKillSoundTemp"; s.TimePosition = 0; s.Parent = SoundService; s:Play()
+        s.Ended:Connect(function() s:Destroy() end); task.delay(4, function() if s.Parent then s:Destroy() end end)
+    end)
+end
+local function updateKillSound() local cfg = SOUNDS[selectedIndex]; if cfg then playerSound.SoundId = cfg.Id; playerSound.Volume = cfg.Volume; pcall(function() ContentProvider:PreloadAsync({ playerSound }) end) end end
+local DEATH_SOUND_NAMES = { died=true,kill=true,killsound=true,gunkill=true,throwkill=true,["kill sound"]=true,jellyplayerdeath=true,venomdeath=true,ufodeath=true,killed=true }
+local function isDeathSound(s) if not s:IsA("Sound") then return false end; local n = string.lower(s.Name); return DEATH_SOUND_NAMES[n] or string.find(n,"kill",1,true)~=nil or string.find(n,"death",1,true)~=nil or string.find(n,"died",1,true)~=nil end
+local function muteDeathSound(s)
+    if not isDeathSound(s) then return end
+    if s:GetAttribute("XitadosDeathOrigSoundId") == nil then s:SetAttribute("XitadosDeathOrigSoundId", s.SoundId); s:SetAttribute("XitadosDeathOrigVol", s.Volume) end
+    pcall(function() s.Volume = 0; s.Playing = false end)
+end
+local function restoreDeathSound(s)
+    if not s:IsA("Sound") then return end
+    local origId = s:GetAttribute("XitadosDeathOrigSoundId"); local origVol = s:GetAttribute("XitadosDeathOrigVol")
+    if origId ~= nil then pcall(function() s.SoundId = origId; s:SetAttribute("XitadosDeathOrigSoundId", nil) end) end
+    if origVol ~= nil then pcall(function() s.Volume = origVol; s:SetAttribute("XitadosDeathOrigVol", nil) end) end
+end
+local function scanDeathSounds(container, mute) if not container then return end; for _, d in ipairs(container:GetDescendants()) do if d:IsA("Sound") then if mute then muteDeathSound(d) else restoreDeathSound(d) end end end end
+local deathContainers = { workspace, ReplicatedStorage }
+for _, container in ipairs(deathContainers) do container.DescendantAdded:Connect(function(d) if d:IsA("Sound") then task.defer(function() if soundEnabled then muteDeathSound(d) end end) end end) end
+local KILL_STAT_NAMES = { kos=true,kills=true,kill=true,ko=true,killed=true,eliminations=true,kills_count=true }
+local KILL_ATTR_NAMES = { "KOs","Kills","kos","kills","KO","killed","Eliminations" }
+local function hookStat(stat)
+    if not stat or not (stat:IsA("IntValue") or stat:IsA("NumberValue")) then return end
+    if not KILL_STAT_NAMES[string.lower(stat.Name)] or stat:GetAttribute("XitadosKOHooked") then return end
+    stat:SetAttribute("XitadosKOHooked", true); local last = stat.Value
+    stat:GetPropertyChangedSignal("Value"):Connect(function() if stat.Value > last then playKillSound() end; last = stat.Value end)
+end
+local function hookContainer(c) if not c then return end; for _, s in ipairs(c:GetChildren()) do hookStat(s) end; c.ChildAdded:Connect(hookStat) end
+for _, n in ipairs(KILL_ATTR_NAMES) do
+    local last = tonumber(player:GetAttribute(n))
+    player:GetAttributeChangedSignal(n):Connect(function() local now = tonumber(player:GetAttribute(n)); if now ~= nil and last ~= nil and now > last then playKillSound() end; last = now end)
+end
+if player:FindFirstChild("leaderstats") then hookContainer(player.leaderstats) end
+for _, n in ipairs({"Stats", "stats", "PlayerStats"}) do local c = player:FindFirstChild(n); if c then hookContainer(c) end end
+player.ChildAdded:Connect(function(c) if c.Name == "leaderstats" or c.Name == "Stats" or c.Name == "stats" or c.Name == "PlayerStats" then hookContainer(c) end end)
+local function hookKillOnCharacter(target, character)
+    local hum = character:WaitForChild("Humanoid", 5); if not hum then return end
+    local function check() local tag = hum:FindFirstChild("creator"); if tag and tag.Value == player then playKillSound() end end
+    hum.Died:Connect(check); hum.HealthChanged:Connect(function(h) if h <= 0 then check() end end)
+end
+local function hookKillPlayer(p) if p == player then return end; if p.Character then task.spawn(hookKillOnCharacter, p, p.Character) end; p.CharacterAdded:Connect(function(c) hookKillOnCharacter(p, c) end) end
+for _, p in ipairs(Players:GetPlayers()) do hookKillPlayer(p) end
+Players.PlayerAdded:Connect(hookKillPlayer)
+
+Tabs.Extras:Section({ Title = "Muerte" })
+UIElements.TogKillSound = Tabs.Extras:Toggle({ Title = "Activar Sonido De Muerte", Value = false, Callback = function(enabled) soundEnabled = enabled == true; for _, container in ipairs(deathContainers) do scanDeathSounds(container, soundEnabled) end end })
+UIElements.DropKillSound = Tabs.Extras:Dropdown({ Title = "Sonidos", Values = {"Sword Hit","TF2","SpongeBob Laugh","Monster Kill","Insta Kill","Fahh","Ez","Among Us","Mambo","Sata Andagi"}, Value = "Sata Andagi", Callback = function(value) for i, sound in ipairs(SOUNDS) do if sound.Name == value then selectedIndex = i; break end end; updateKillSound() end })
+
+Tabs.Extras:Section({ Title = "Nombre" })
+
+local nameChangeEnabled = false; local nameChangeForAll = false; local customName = "ClanXitados"
+local nameTracked = setmetatable({}, { __mode = "k" }); local nameOriginal = setmetatable({}, { __mode = "k" })
+local nameRendered = setmetatable({}, { __mode = "k" }); local nameUpdating = setmetatable({}, { __mode = "k" })
+local nameConnections = setmetatable({}, { __mode = "k" }); local nameContainerConnections = {}
+
+local function escapeNamePattern(text) return string.gsub(text, "([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") end
+local function isNameTextElement(element) return element:IsA("TextLabel") or element:IsA("TextButton") or element:IsA("TextBox") end
+
+local function transformNameText(text)
+    if not nameChangeEnabled or not customName or customName == "" then return text end
+    local out = text
+    if nameChangeForAll then
+        for _, targetPlayer in ipairs(Players:GetPlayers()) do
+            if targetPlayer.Name and targetPlayer.Name ~= "" then out = string.gsub(out, escapeNamePattern(targetPlayer.Name), customName) end
+            if targetPlayer.DisplayName and targetPlayer.DisplayName ~= "" and targetPlayer.DisplayName ~= targetPlayer.Name then out = string.gsub(out, escapeNamePattern(targetPlayer.DisplayName), customName) end
+        end
+    else
+        if player.Name and player.Name ~= "" then out = string.gsub(out, escapeNamePattern(player.Name), customName) end
+        if player.DisplayName and player.DisplayName ~= "" and player.DisplayName ~= player.Name then out = string.gsub(out, escapeNamePattern(player.DisplayName), customName) end
+    end
+    return out
+end
+
+local function refreshNameElement(element)
+    if not element or not element.Parent or not isNameTextElement(element) or nameUpdating[element] then return end
+    local currentText = element.Text; local originalText = nameOriginal[element]; local renderedText = nameRendered[element]
+    if originalText == nil then originalText = currentText
+    elseif renderedText ~= nil and currentText ~= renderedText then originalText = currentText end
+    nameOriginal[element] = originalText; local transformed = transformNameText(originalText); nameRendered[element] = transformed
+    if element.Text ~= transformed then nameUpdating[element] = true; pcall(function() element.Text = transformed end); nameUpdating[element] = nil end
+end
+
+local function refreshAllNameElements() for element in pairs(nameTracked) do refreshNameElement(element) end end
+
+local function trackNameElement(element)
+    if not element or not element.Parent or not isNameTextElement(element) then return end
+    nameTracked[element] = true
+    if not nameConnections[element] then nameConnections[element] = element:GetPropertyChangedSignal("Text"):Connect(function() refreshNameElement(element) end) end
+    refreshNameElement(element)
+end
+
+local function scanNameContainer(container)
+    if not container or nameContainerConnections[container] then return end
+    for _, element in ipairs(container:GetDescendants()) do trackNameElement(element) end
+    nameContainerConnections[container] = container.DescendantAdded:Connect(trackNameElement)
+end
+
+task.spawn(function()
+    local containers = { player:WaitForChild("PlayerGui"), game:GetService("CoreGui"), workspace }
+    for _, container in ipairs(containers) do pcall(function() scanNameContainer(container) end) end
+end)
+
+UIElements.TogCambiarNombre = Tabs.Extras:Toggle({ Title = "Activar Nombre", Value = false, Callback = function(enabled) nameChangeEnabled = enabled == true; refreshAllNameElements() end })
+UIElements.TogCambiarNombreTodos = Tabs.Extras:Toggle({ Title = "Activar Para Todos", Value = false, Callback = function(enabled) nameChangeForAll = enabled == true; refreshAllNameElements() end })
+pcall(function()
+    UIElements.InputNombre = Tabs.Extras:Input({ Title = "Nombre", Value = customName, Placeholder = "Escribe el nombre...", Callback = function(value) customName = tostring(value or ""); if nameChangeEnabled then refreshAllNameElements() end end })
+end)
+
+Tabs.Esp:Section({ Title = "Enemigos" })
+UIElements.TogEsp = Tabs.Esp:Toggle({ Title = "ESP", Callback = function(s) espEnabled = s end })
+UIElements.ColEsp = Tabs.Esp:Colorpicker({ Title = "ESP Color", Default = Color3.fromRGB(255, 0, 0), Callback = function(c) espColor = c end })
+UIElements.TogEspLine = Tabs.Esp:Toggle({ Title = "ESP Line", Value = false, Callback = function(s) espLineEnabled = s end })
+UIElements.ColEspLine = Tabs.Esp:Colorpicker({ Title = "ESP Line Color", Default = Color3.fromRGB(255, 0, 0), Callback = function(c) espLineColor = c end })
+UIElements.TogEspName = Tabs.Esp:Toggle({ Title = "ESP Name", Value = false, Callback = function(s) espNameEnabled = s end })
+UIElements.ColEspName = Tabs.Esp:Colorpicker({ Title = "ESP Name Color", Default = Color3.fromRGB(255, 0, 0), Callback = function(c) espNameColor = c end })
+
+Tabs.Esp:Section({ Title = "Amigos" })
+UIElements.TogEspAlly = Tabs.Esp:Toggle({ Title = "ESP", Callback = function(s) espAllyEnabled = s end })
+UIElements.ColEspAlly = Tabs.Esp:Colorpicker({ Title = "ESP Color", Default = Color3.fromRGB(0, 255, 0), Callback = function(c) espAllyColor = c end })
+UIElements.TogEspAllyLine = Tabs.Esp:Toggle({ Title = "ESP Line", Value = false, Callback = function(s) espAllyLineEnabled = s end })
+UIElements.ColEspAllyLine = Tabs.Esp:Colorpicker({ Title = "ESP Line Color", Default = Color3.fromRGB(0, 255, 0), Callback = function(c) espAllyLineColor = c end })
+UIElements.TogEspAllyName = Tabs.Esp:Toggle({ Title = "ESP Name", Value = false, Callback = function(s) espAllyNameEnabled = s end })
+UIElements.ColEspAllyName = Tabs.Esp:Colorpicker({ Title = "ESP Name Color", Default = Color3.fromRGB(0, 255, 0), Callback = function(c) espAllyNameColor = c end })
+
+local activeESPs = {}
+local MAX_ESP_DISTANCE = 4000
+local serverDeadCharacters = setmetatable({}, { __mode = "k" })
+
+local function cleanESP(targetPlayer)
+    local espObj = activeESPs[targetPlayer]; if not espObj then return end
+    if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
+    if espObj.Line then pcall(function() espObj.Line:Destroy() end) end
+    if espObj.NameLabel then pcall(function() espObj.NameLabel:Destroy() end) end
+    if espObj.LineGui then pcall(function() espObj.LineGui:Destroy() end) end
+    if espObj.NameGui then pcall(function() espObj.NameGui:Destroy() end) end
+    activeESPs[targetPlayer] = nil
+end
+
+local function createLineESP(targetPlayer)
+    local lineGui = Instance.new("ScreenGui"); lineGui.Name = targetPlayer.Name .. "_LineESP"; lineGui.ResetOnSpawn = false; lineGui.IgnoreGuiInset = true; lineGui.DisplayOrder = 998; lineGui.Parent = player:WaitForChild("PlayerGui")
+    local line = Instance.new("Frame"); line.Name = "Line"; line.BackgroundColor3 = Color3.fromRGB(255,255,255); line.BorderSizePixel = 0; line.AnchorPoint = Vector2.new(0.5,0.5); line.Visible = false; line.ZIndex = 2; line.Parent = lineGui
+    return lineGui, line
+end
+
+local function createNameESP(targetPlayer)
+    local nameGui = Instance.new("ScreenGui"); nameGui.Name = targetPlayer.Name .. "_NameESP"; nameGui.ResetOnSpawn = false; nameGui.IgnoreGuiInset = true; nameGui.DisplayOrder = 999; nameGui.Parent = player:WaitForChild("PlayerGui")
+    local nameLabel = Instance.new("TextLabel"); nameLabel.Name = "NameLabel"; nameLabel.BackgroundTransparency = 1; nameLabel.Size = UDim2.new(0,200,0,20); nameLabel.AnchorPoint = Vector2.new(0.5,1)
+    nameLabel.Font = Enum.Font.GothamBold; nameLabel.TextSize = 13; nameLabel.TextColor3 = Color3.fromRGB(255,255,255); nameLabel.TextStrokeTransparency = 0; nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
+    nameLabel.Text = targetPlayer.Name; nameLabel.Visible = false; nameLabel.Parent = nameGui
+    return nameGui, nameLabel
+end
+
+local function WatchServerDeath(char)
+    if not char then return end
+    task.spawn(function()
+        local hum = char:WaitForChild("Humanoid", 10); if not hum then return end
+        if hum.Health <= 0 then serverDeadCharacters[char] = true; local p = Players:GetPlayerFromCharacter(char); if p then cleanESP(p) end; return end
+        hum.Died:Connect(function() serverDeadCharacters[char] = true; local p = Players:GetPlayerFromCharacter(char); if p then cleanESP(p) end end)
+    end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do if p ~= player then if p.Character then WatchServerDeath(p.Character) end; p.CharacterAdded:Connect(function(c) WatchServerDeath(c) end) end end
+Players.PlayerAdded:Connect(function(p) if p ~= player then if p.Character then WatchServerDeath(p.Character) end; p.CharacterAdded:Connect(function(c) WatchServerDeath(c) end) end end)
+
+task.spawn(function()
+    while task.wait(0.2) do
+        local anyEnemyEsp = espEnabled or espLineEnabled or espNameEnabled
+        local anyAllyEsp = espAllyEnabled or espAllyLineEnabled or espAllyNameEnabled
+        if (anyEnemyEsp or anyAllyEsp) and IsInMatchStrict() then
+            local myChar = player.Character; local myHead = myChar and myChar:FindFirstChild("Head"); local myPos = myHead and myHead.Position
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= player then
+                    local char = p.Character; local serverConfirmedDead = char and serverDeadCharacters[char] == true
+                    local enemy = isEnemy(p); local ally = isAlly(p); local useEnemy = enemy and anyEnemyEsp; local useAlly = ally and anyAllyEsp
+                    if char and not serverConfirmedDead and char:FindFirstChild("Head") and (useEnemy or useAlly) then
+                        local targetHead = char.Head; local dist = myPos and (targetHead.Position - myPos).Magnitude or 0
+                        if dist <= MAX_ESP_DISTANCE then
+                            local wantAlly = useAlly and not useEnemy
+                            if activeESPs[p] and (activeESPs[p].Char ~= char or activeESPs[p].IsAlly ~= wantAlly) then cleanESP(p) end
+                            if not activeESPs[p] then activeESPs[p] = { Char = char, IsAlly = wantAlly } end
+                            local espObj = activeESPs[p]
+                            local hlOn = wantAlly and espAllyEnabled or (not wantAlly and espEnabled)
+                            local lineOn = wantAlly and espAllyLineEnabled or (not wantAlly and espLineEnabled)
+                            local nameOn = wantAlly and espAllyNameEnabled or (not wantAlly and espNameEnabled)
+                            local hlColor = wantAlly and espAllyColor or espColor
+                            local lineColor = wantAlly and espAllyLineColor or espLineColor
+                            local nameColor = wantAlly and espAllyNameColor or espNameColor
+                            if hlOn then
+                                if not espObj.Highlight then
+                                    local highlight = Instance.new("Highlight"); highlight.Name = p.Name .. "_Glow"; highlight.FillTransparency = 1; highlight.OutlineTransparency = 0
+                                    highlight.Enabled = true; highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; highlight.Adornee = char; highlight.Parent = espFolder; espObj.Highlight = highlight
+                                end
+                                if espObj.Highlight.OutlineColor ~= hlColor then espObj.Highlight.OutlineColor = hlColor end
+                            elseif espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end); espObj.Highlight = nil end
+                            if lineOn then if not espObj.Line then local gui, line = createLineESP(p); espObj.LineGui = gui; espObj.Line = line end; espObj.Line.BackgroundColor3 = lineColor
+                            elseif espObj.Line then pcall(function() espObj.LineGui:Destroy() end); espObj.Line = nil; espObj.LineGui = nil end
+                            if nameOn then if not espObj.NameLabel then local gui, label = createNameESP(p); espObj.NameGui = gui; espObj.NameLabel = label end; espObj.NameLabel.TextColor3 = nameColor
+                            elseif espObj.NameLabel then pcall(function() espObj.NameGui:Destroy() end); espObj.NameLabel = nil; espObj.NameGui = nil end
+                        else cleanESP(p) end
+                    else cleanESP(p) end
+                end
+            end
+        else for _, p in pairs(Players:GetPlayers()) do cleanESP(p) end end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local drawingsEnabled = espLineEnabled or espNameEnabled or espAllyLineEnabled or espAllyNameEnabled
+    local inMatch = drawingsEnabled and IsInMatchStrict()
+    local currentCam = workspace.CurrentCamera; if not currentCam then return end
+    local viewportSize = currentCam.ViewportSize; local lineStart = Vector2.new(viewportSize.X / 2, viewportSize.Y)
+    for targetPlayer, espObj in pairs(activeESPs) do
+        if espObj.Line or espObj.NameLabel then
+            local char = espObj.Char; local head = char and char:FindFirstChild("Head"); local isAllyTarget = espObj.IsAlly == true
+            local relationOk = (isAllyTarget and isAlly(targetPlayer)) or ((not isAllyTarget) and isEnemy(targetPlayer))
+            local validTarget = inMatch and targetPlayer.Parent ~= nil and targetPlayer.Character == char and head ~= nil and serverDeadCharacters[char] ~= true and relationOk
+            local screenPosition, onScreen
+            if validTarget then screenPosition, onScreen = currentCam:WorldToViewportPoint(head.Position); onScreen = onScreen and screenPosition.Z > 0 end
+            local lineOn = isAllyTarget and espAllyLineEnabled or (not isAllyTarget and espLineEnabled)
+            local nameOn = isAllyTarget and espAllyNameEnabled or (not isAllyTarget and espNameEnabled)
+            local lineColor = isAllyTarget and espAllyLineColor or espLineColor
+            local nameColor = isAllyTarget and espAllyNameColor or espNameColor
+            if espObj.Line then
+                if lineOn and validTarget and onScreen then
+                    local ex, ey = screenPosition.X, screenPosition.Y; local dx = ex - lineStart.X; local dy = ey - lineStart.Y
+                    local length = math.sqrt(dx*dx + dy*dy); local angle = math.deg(math.atan2(dy, dx))
+                    local midX = (lineStart.X + ex) / 2; local midY = (lineStart.Y + ey) / 2
+                    espObj.Line.BackgroundColor3 = lineColor; espObj.Line.Position = UDim2.new(0, midX, 0, midY)
+                    espObj.Line.Size = UDim2.new(0, length, 0, 1.5); espObj.Line.Rotation = angle; espObj.Line.Visible = true
+                else espObj.Line.Visible = false end
+            end
+            if espObj.NameLabel then
+                if nameOn and validTarget and onScreen then
+                    espObj.NameLabel.Text = targetPlayer.Name; espObj.NameLabel.TextColor3 = nameColor
+                    espObj.NameLabel.Position = UDim2.new(0, screenPosition.X, 0, screenPosition.Y - 20); espObj.NameLabel.Visible = true
+                else espObj.NameLabel.Visible = false end
+            end
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p) cleanESP(p) end)
+
+getgenv().AutoEventFarm = false
+local Networking = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Networking")
+local RemoteFarm = Networking and Networking:FindFirstChild("RE/Events/CollectEventSpawnable")
+
+UIElements.TogFarmEvent = Tabs.Evento:Toggle({ Title = "Farm Event", Callback = function(s)
+    getgenv().AutoEventFarm = s
+    if s then
+        task.spawn(function()
+            while getgenv().AutoEventFarm do
+                pcall(function()
+                    if RemoteFarm then RemoteFarm:FireServer()
+                    else Networking = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Networking"); RemoteFarm = Networking and Networking:FindFirstChild("RE/Events/CollectEventSpawnable") end
+                end)
+                local char = player.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local container = workspace:FindFirstChild("SpawnablesClient")
+                    if container then
+                        for _, obj in ipairs(container:GetChildren()) do
+                            if not getgenv().AutoEventFarm then break end
+                            local touchPart = obj:FindFirstChild("Touch")
+                            if touchPart then pcall(function() firetouchinterest(hrp, touchPart, 0); firetouchinterest(hrp, touchPart, 1) end) end
+                        end
+                    end
+                end
+                task.wait(0.05)
+            end
+        end)
+    end
+end })
+
+local AnimToggleElements = {}
+
+local function ApplyAnims(ids)
+    local char = player.Character; if not char or not ids then return end
+    local hum = char:FindFirstChildOfClass("Humanoid"); local Animate = char:FindFirstChild("Animate")
+    if not Animate or not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if animator then for _, track in ipairs(animator:GetPlayingAnimationTracks()) do pcall(function() track:Stop(0) end) end end
+    local function setAnimId(parentName, childName, newId)
+        local parentObj = Animate:FindFirstChild(parentName)
+        if parentObj then local animObj = parentObj:FindFirstChild(childName); if animObj and animObj:IsA("Animation") then animObj.AnimationId = newId or "rbxassetid://0" end end
+    end
+    setAnimId("idle","Animation1",ids.idle1); setAnimId("idle","Animation2",ids.idle2); setAnimId("walk","WalkAnim",ids.walk)
+    setAnimId("run","RunAnim",ids.run); setAnimId("jump","JumpAnim",ids.jump); setAnimId("fall","FallAnim",ids.fall)
+    Animate.Enabled = false; task.wait(0.03); Animate.Enabled = true
+    if hum.Health > 0 then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end) end
+end
+
+local AnimPacks = {
+    { Name = "Astronaut", Ids = { idle1="http://www.roblox.com/asset/?id=891621366",idle2="http://www.roblox.com/asset/?id=891633237",walk="http://www.roblox.com/asset/?id=891667138",run="http://www.roblox.com/asset/?id=891636393",jump="http://www.roblox.com/asset/?id=891627522",fall="http://www.roblox.com/asset/?id=891617961" }},
+    { Name = "Bubbly", Ids = { idle1="http://www.roblox.com/asset/?id=910004836",idle2="http://www.roblox.com/asset/?id=910009958",walk="http://www.roblox.com/asset/?id=910034870",run="http://www.roblox.com/asset/?id=910025107",jump="http://www.roblox.com/asset/?id=910016857",fall="http://www.roblox.com/asset/?id=910001910" }},
+    { Name = "Cartoony", Ids = { idle1="http://www.roblox.com/asset/?id=742637544",idle2="http://www.roblox.com/asset/?id=742638445",walk="http://www.roblox.com/asset/?id=742640026",run="http://www.roblox.com/asset/?id=742638842",jump="http://www.roblox.com/asset/?id=742637942",fall="http://www.roblox.com/asset/?id=742637151" }},
+    { Name = "Elder", Ids = { idle1="http://www.roblox.com/asset/?id=845397899",idle2="http://www.roblox.com/asset/?id=845400520",walk="http://www.roblox.com/asset/?id=845403856",run="http://www.roblox.com/asset/?id=845386501",jump="http://www.roblox.com/asset/?id=845398858",fall="http://www.roblox.com/asset/?id=845396048" }},
+    { Name = "Knight", Ids = { idle1="http://www.roblox.com/asset/?id=657595757",idle2="http://www.roblox.com/asset/?id=657568135",walk="http://www.roblox.com/asset/?id=657552124",run="http://www.roblox.com/asset/?id=657564596",jump="http://www.roblox.com/asset/?id=658409194",fall="http://www.roblox.com/asset/?id=657600338" }},
+    { Name = "Levitation", Ids = { idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616013216",run="http://www.roblox.com/asset/?id=616010382",jump="http://www.roblox.com/asset/?id=616008936",fall="http://www.roblox.com/asset/?id=616005863" }},
+    { Name = "Mage", Ids = { idle1="http://www.roblox.com/asset/?id=707742142",idle2="http://www.roblox.com/asset/?id=707855907",walk="http://www.roblox.com/asset/?id=707897309",run="http://www.roblox.com/asset/?id=707861613",jump="http://www.roblox.com/asset/?id=707853694",fall="http://www.roblox.com/asset/?id=707829716" }},
+    { Name = "Ninja", Ids = { idle1="http://www.roblox.com/asset/?id=656117400",idle2="http://www.roblox.com/asset/?id=656118341",walk="http://www.roblox.com/asset/?id=656121766",run="http://www.roblox.com/asset/?id=656118852",jump="http://www.roblox.com/asset/?id=656117878",fall="http://www.roblox.com/asset/?id=656115606" }},
+    { Name = "Pirate", Ids = { idle1="http://www.roblox.com/asset/?id=750781874",idle2="http://www.roblox.com/asset/?id=750782770",walk="http://www.roblox.com/asset/?id=750785693",run="http://www.roblox.com/asset/?id=750783738",jump="http://www.roblox.com/asset/?id=750782230",fall="http://www.roblox.com/asset/?id=750780242" }},
+    { Name = "Robot", Ids = { idle1="http://www.roblox.com/asset/?id=616088211",idle2="http://www.roblox.com/asset/?id=616089559",walk="http://www.roblox.com/asset/?id=616095330",run="http://www.roblox.com/asset/?id=616091570",jump="http://www.roblox.com/asset/?id=616090535",fall="http://www.roblox.com/asset/?id=616087089" }},
+    { Name = "Stylish", Ids = { idle1="http://www.roblox.com/asset/?id=616136790",idle2="http://www.roblox.com/asset/?id=616138447",walk="http://www.roblox.com/asset/?id=616146177",run="http://www.roblox.com/asset/?id=616140816",jump="http://www.roblox.com/asset/?id=616139451",fall="http://www.roblox.com/asset/?id=616134815" }},
+    { Name = "SuperHero", Ids = { idle1="http://www.roblox.com/asset/?id=616111295",idle2="http://www.roblox.com/asset/?id=616113536",walk="http://www.roblox.com/asset/?id=616122287",run="http://www.roblox.com/asset/?id=616117076",jump="http://www.roblox.com/asset/?id=616115533",fall="http://www.roblox.com/asset/?id=616108001" }},
+    { Name = "Toy", Ids = { idle1="http://www.roblox.com/asset/?id=782841498",idle2="http://www.roblox.com/asset/?id=782845736",walk="http://www.roblox.com/asset/?id=782843345",run="http://www.roblox.com/asset/?id=782842708",jump="http://www.roblox.com/asset/?id=782847020",fall="http://www.roblox.com/asset/?id=782846423" }},
+    { Name = "Vampire", Ids = { idle1="http://www.roblox.com/asset/?id=1083445855",idle2="http://www.roblox.com/asset/?id=1083450166",walk="http://www.roblox.com/asset/?id=1083473930",run="http://www.roblox.com/asset/?id=1083462077",jump="http://www.roblox.com/asset/?id=1083455352",fall="http://www.roblox.com/asset/?id=1083443587" }},
+    { Name = "Werewolf", Ids = { idle1="http://www.roblox.com/asset/?id=1083195517",idle2="http://www.roblox.com/asset/?id=1083214717",walk="http://www.roblox.com/asset/?id=1083178339",run="http://www.roblox.com/asset/?id=1083216690",jump="http://www.roblox.com/asset/?id=1083218792",fall="http://www.roblox.com/asset/?id=1083189019" }},
+    { Name = "Zombie", Ids = { idle1="http://www.roblox.com/asset/?id=616158929",idle2="http://www.roblox.com/asset/?id=616160636",walk="http://www.roblox.com/asset/?id=616168032",run="http://www.roblox.com/asset/?id=616163682",jump="http://www.roblox.com/asset/?id=616161997",fall="http://www.roblox.com/asset/?id=616157476" }},
+    { Name = "Patrol", Ids = { idle1="http://www.roblox.com/asset/?id=1149612882",idle2="http://www.roblox.com/asset/?id=1150842221",walk="http://www.roblox.com/asset/?id=1151231493",run="http://www.roblox.com/asset/?id=1150967949",jump="http://www.roblox.com/asset/?id=1148811837",fall="http://www.roblox.com/asset/?id=1148863382" }},
+    { Name = "Confident", Ids = { idle1="http://www.roblox.com/asset/?id=1069977950",idle2="http://www.roblox.com/asset/?id=1069987858",walk="http://www.roblox.com/asset/?id=1070017263",run="http://www.roblox.com/asset/?id=1070001516",jump="http://www.roblox.com/asset/?id=1069984524",fall="http://www.roblox.com/asset/?id=1069973677" }},
+    { Name = "Popstar", Ids = { idle1="http://www.roblox.com/asset/?id=1212900985",idle2="http://www.roblox.com/asset/?id=1150842221",walk="http://www.roblox.com/asset/?id=1212980338",run="http://www.roblox.com/asset/?id=1212980348",jump="http://www.roblox.com/asset/?id=1212954642",fall="http://www.roblox.com/asset/?id=1212900995" }},
+    { Name = "Cowboy", Ids = { idle1="http://www.roblox.com/asset/?id=1014390418",idle2="http://www.roblox.com/asset/?id=1014398616",walk="http://www.roblox.com/asset/?id=1014421541",run="http://www.roblox.com/asset/?id=1014401683",jump="http://www.roblox.com/asset/?id=1014394726",fall="http://www.roblox.com/asset/?id=1014384571" }},
+    { Name = "Ghost", Ids = { idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616013216",run="http://www.roblox.com/asset/?id=616013216",jump="http://www.roblox.com/asset/?id=616008936",fall="http://www.roblox.com/asset/?id=616005863" }},
+    { Name = "Sneaky", Ids = { idle1="http://www.roblox.com/asset/?id=1132473842",idle2="http://www.roblox.com/asset/?id=1132477671",walk="http://www.roblox.com/asset/?id=1132510133",run="http://www.roblox.com/asset/?id=1132494274",jump="http://www.roblox.com/asset/?id=1132489853",fall="http://www.roblox.com/asset/?id=1132469004" }},
+    { Name = "Princess", Ids = { idle1="http://www.roblox.com/asset/?id=941003647",idle2="http://www.roblox.com/asset/?id=941013098",walk="http://www.roblox.com/asset/?id=941028902",run="http://www.roblox.com/asset/?id=941015281",jump="http://www.roblox.com/asset/?id=941008832",fall="http://www.roblox.com/asset/?id=941000007" }},
+    { Name = "Default", Ids = { idle1="http://www.roblox.com/asset/?id=2510196951",idle2="http://www.roblox.com/asset/?id=2510197257",walk="http://www.roblox.com/asset/?id=2510202577",run="http://www.roblox.com/asset/?id=2510198475",jump="http://www.roblox.com/asset/?id=2510197830",fall="http://www.roblox.com/asset/?id=2510195892" }},
+}
+
+local _animSwitching = false
+
+local speedEnabled = false; local speedValue = 0.16; local flyEnabled = false; local flyValue = 40; local infiniteJumpEnabled = false
+local speedConnection = nil; local flyConnection = nil
+
+local function stopSpeed() if speedConnection then speedConnection:Disconnect(); speedConnection = nil end end
+
+local function startSpeed()
+    stopSpeed()
+    speedConnection = RunService.RenderStepped:Connect(function()
+        if not speedEnabled or flyEnabled then return end
+        local char = player.Character; if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart"); local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not humanoid then return end
+        local moveDir = humanoid.MoveDirection
+        if moveDir.Magnitude > 0 then hrp.CFrame = hrp.CFrame + (moveDir * speedValue) end
+    end)
+end
+
+local function setCharacterCollisions(enabled)
+    local character = player.Character; if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then pcall(function() part.CanCollide = enabled end) end end
+end
+
+local function stopFly()
+    if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
+    local character = player.Character; local humanoid = character and character:FindFirstChildOfClass("Humanoid"); local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then pcall(function() root.Anchored = false end) end
+    if humanoid then pcall(function() humanoid.PlatformStand = false; humanoid.AutoRotate = true end) end
+    setCharacterCollisions(true)
+end
+
+local function startFly()
+    stopFly(); setCharacterCollisions(false)
+    flyConnection = RunService.Heartbeat:Connect(function()
+        if not flyEnabled then return end
+        local character = player.Character; local humanoid = character and character:FindFirstChildOfClass("Humanoid"); local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not root or humanoid.Health <= 0 or humanoid.Sit then return end
+        local cam = workspace.CurrentCamera; if not cam then return end
+        pcall(function() humanoid.PlatformStand = true; humanoid.AutoRotate = false end)
+        for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then pcall(function() part.CanCollide = false end) end end
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if animator then for _, track in ipairs(animator:GetPlayingAnimationTracks()) do pcall(function() track:Stop(0) end) end end
+        local look = cam.CFrame.LookVector; local right = cam.CFrame.RightVector; local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - right end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + right end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
+        local face = look; if face.Magnitude > 0.05 then root.CFrame = CFrame.lookAt(root.Position, root.Position + face) end
+        if dir.Magnitude < 0.01 then root.Anchored = true; root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero
+        else if root.Anchored then root.Anchored = false end; root.AssemblyLinearVelocity = dir.Unit * flyValue; root.AssemblyAngularVelocity = Vector3.zero end
+    end)
+end
+
+UserInputService.JumpRequest:Connect(function()
+    if not infiniteJumpEnabled then return end
+    local char = player.Character; local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+end)
+
+player.CharacterAdded:Connect(function() task.wait(0.35); if speedEnabled then startSpeed() end; if flyEnabled then startFly() end end)
+
+Tabs.Player:Section({ Title = "Movement" })
+UIElements.TogSpeed = Tabs.Player:Toggle({ Title = "Speed", Value = false, Callback = function(v) speedEnabled = v == true; if speedEnabled then startSpeed() else stopSpeed() end end })
+UIElements.TogFly = Tabs.Player:Toggle({ Title = "Fly", Value = false, Callback = function(v) flyEnabled = v == true; if flyEnabled then startFly() else stopFly() end end })
+UIElements.TogInfiniteJump = Tabs.Player:Toggle({ Title = "InfiniteJump", Value = false, Callback = function(v) infiniteJumpEnabled = v == true end })
+
+local telaMovementEnabled = false
+local telaMovementName = "FreeFireTelaMovement"
+local telaMovementSettings = { TurnSpeed = 45, SideThreshold = 0.35, InstantTurn = false }
+
+local function stopTelaMovement()
+    RunService:UnbindFromRenderStep(telaMovementName)
+    local character = player.Character; local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then humanoid.AutoRotate = true end
+end
+
+local function startTelaMovement()
+    RunService:UnbindFromRenderStep(telaMovementName)
+    RunService:BindToRenderStep(telaMovementName, Enum.RenderPriority.Character.Value + 1, function(dt)
+        if not telaMovementEnabled then return end
+        local character = player.Character; if not character then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid"); local root = character:FindFirstChild("HumanoidRootPart"); local cam = workspace.CurrentCamera
+        if not humanoid or not root or not cam or humanoid.Health <= 0 then return end
+        local rightVector = cam.CFrame.RightVector; local right = Vector3.new(rightVector.X, 0, rightVector.Z)
+        if right.Magnitude < 0.001 then return end; right = right.Unit
+        local side = humanoid.MoveDirection:Dot(right)
+        if math.abs(side) < telaMovementSettings.SideThreshold then humanoid.AutoRotate = true; return end
+        humanoid.AutoRotate = false; local pos = root.Position
+        local target = CFrame.lookAt(pos, pos + (side > 0 and right or -right))
+        root.CFrame = telaMovementSettings.InstantTurn and target or root.CFrame:Lerp(target, 1 - math.exp(-telaMovementSettings.TurnSpeed * dt))
+    end)
+end
+
+UIElements.TogMovimientoTela = Tabs.Player:Toggle({ Title = "Movimiento Tela", Value = false, Callback = function(enabled) telaMovementEnabled = enabled == true; if telaMovementEnabled then startTelaMovement() else stopTelaMovement() end end })
+player.CharacterAdded:Connect(function() task.wait(0.35); if telaMovementEnabled then startTelaMovement() end end)
+
+for _, pack in ipairs(AnimPacks) do
+    local tog = Tabs.Anim:Toggle({
+        Title = pack.Name, Value = false,
+        Callback = function(enabled)
+            if _animSwitching then return end
+            if enabled then
+                _animSwitching = true
+                for otherName, otherTog in pairs(AnimToggleElements) do if otherName ~= pack.Name then pcall(function() otherTog:Set(false) end) end end
+                _animSwitching = false; SelectedAnim = pack.Ids; SelectedAnimName = pack.Name
+                task.spawn(function() ApplyAnims(pack.Ids) end)
+            else
+                if SelectedAnimName == pack.Name then SelectedAnim = nil; SelectedAnimName = nil end
+            end
+        end
+    })
+    AnimToggleElements[pack.Name] = tog
+end
+
+player.CharacterAdded:Connect(function(char)
+    local animate = char:WaitForChild("Animate", 5)
+    if animate and SelectedAnim then task.wait(0.25); ApplyAnims(SelectedAnim) end
+end)
