@@ -11,6 +11,7 @@ local SoundService = game:GetService("SoundService")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
+local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
@@ -18,6 +19,125 @@ local mouse = player:GetMouse()
 local destroyed = false
 
 local MY_ROBLOX_NAME = player.Name
+
+local LANG = (getgenv and getgenv().XitadoLang) or "en"
+if LANG ~= "en" and LANG ~= "es" then LANG = "en" end
+local Locale = {
+	en = {
+		TabBaneable="RAGE", TabLegit="LEGIT", TabEsp="ESP", TabExtras="EXTRAS", TabKeybinds="KEYBINDS", TabButtons="BUTTONS", TabAnims="ANIMATIONS", TabSkin="SKINCHANGER",
+		SecAutoshot="AUTOSHOT", SecSilent="SILENT AIM", SecHitbox="HITBOX", SecTrigger="TRIGGER", SecMacro="MACRO",
+		SecCamlock="CAMLOCK", SecScreen="SCREEN", SecEnemies="ENEMIES", SecAllies="ALLIES", SecName="NAME",
+		SecKill="KILL", SecShoot="SHOOT", SecEffect="EFFECT", SecPlayer="PLAYER", SecPerf="PERFORMANCE",
+		SecAccessories="ACCESSORIES", SecSky="SKY", SecMenu="MENU", SecButtons="BUTTONS", SecAnimList="ANIMATIONS", SecSkinTipo="TYPE",
+		SecKeyBaneable="RAGE", SecKeyLegit="LEGIT", SecKeyEsp="ESP", SecKeyExtras="EXTRAS",
+		AnimSoloMe="Only Me", AnimEveryone="All Players",
+		NotifyAnimSolo="Only you see the animation. Others see the animation you had equipped before (your original animation).",
+		NotifyAnimEveryone="Everyone sees the animations you equipped.",
+		AutoShot="AutoShot", SilentAim="Silent Aim", ShowFov="Show FOV", AutoEquip="Auto Equip Gun",
+		RespectKnife="Respect Equipped Knife", Respect25="Respect Reload", Target="Target", Size="Size",
+		NotifyRespectKnife="If knife is equipped, gun will not be pulled out",
+		NotifyRespectReload="Auto equip waits after holstering the gun",
+		Hitbox="Hitbox", Transparency="Transparency", TriggerBot="TriggerBot", Macro="Macro", CamLock="Cam Lock",
+		GunOnly="Gun Only", KnifeOnly="Knife Only", StretchScreen="Stretch Screen", Esp="ESP", Names="Names",
+		Line="Line", Studs="Studs", ChangeMyName="Change My Name", ChangeAllName="Change All Names",
+		KillSound="Kill Sound", Sound="Sound", Volume="Volume", SoloMe="Only Me", ShootSound="Shoot Sound",
+		KillEffect="Kill Effect", Effect="Effect", WalkSpeed="Walk Speed", Fly="Fly", Speed="Speed",
+		Fps="FPS", Ping="Ping", FpsBoost="FPS Boost", RemoveAccessories="Remove Accessories",
+		RemoveAnimations="Remove Animations", Skybox="Skybox", Sky="Sky", Language="Language", Apply="Apply",
+		LockPosition="Lock Position", Invisible="Invisible", KnifeAura="Knife Aura", Bajar="Down/Up",
+		BtnAutoShot="Auto", BtnSilent="Silent", BtnAura="Aura", BtnInv="Inv",
+		BtnCam="Cam", BtnFly="Fly", BtnBajar="Down",
+		NotifyLang="Language applied.",
+		WarnFov="AutoShot and Silent Aim need FOV enabled!",
+		Head="Head", Torso="Torso", FullBody="Full Body",
+		SkinPlaceholder="enter username", SkinApply="Apply", SkinRemove="Remove", SkinR15="R15", SkinR6="R6",
+		SkinApplied="Skin applied", SkinRemoved="Skin removed", SkinNotFound="User not found", SkinWaitChar="Waiting for character",
+	},
+	es = {
+		TabBaneable="RAGE", TabLegit="LEGIT", TabEsp="ESP", TabExtras="EXTRAS", TabKeybinds="TECLAS", TabButtons="BOTONES", TabAnims="ANIMACIONES", TabSkin="SKINCHANGER",
+		SecAutoshot="AUTOSHOT", SecSilent="SILENT AIM", SecHitbox="HITBOX", SecTrigger="TRIGGER", SecMacro="MACRO",
+		SecCamlock="CAMLOCK", SecScreen="PANTALLA", SecEnemies="ENEMIGOS", SecAllies="AMIGOS", SecName="NOMBRE",
+		SecKill="KILL", SecShoot="DISPARO", SecEffect="EFECTO", SecPlayer="JUGADOR", SecPerf="RENDIMIENTO",
+		SecAccessories="ACCESORIOS", SecSky="CIELO", SecMenu="MENU", SecButtons="BOTONES", SecAnimList="ANIMACIONES", SecSkinTipo="TIPO",
+		SecKeyBaneable="RAGE", SecKeyLegit="LEGIT", SecKeyEsp="ESP", SecKeyExtras="EXTRAS",
+		AnimSoloMe="Solo Yo", AnimEveryone="Todos Los Jugadores",
+		NotifyAnimSolo="Solo tu ves la animacion. Los demas ven la animacion que tenias equipada antes (tu animacion original).",
+		NotifyAnimEveryone="Todos ven las animaciones que equipaste.",
+		AutoShot="AutoShot", SilentAim="Silent Aim", ShowFov="Mostrar FOV", AutoEquip="Auto Equipar Arma",
+		RespectKnife="Respetar Cuchillo Equipado", Respect25="Respetar Recarga", Target="Objetivo", Size="Tamaño",
+		NotifyRespectKnife="Si tienes el cuchillo en la mano no sacara el arma",
+		NotifyRespectReload="Autoequip espera despues de guardar el arma",
+		Hitbox="Hitbox", Transparency="Transparencia", TriggerBot="TriggerBot", Macro="Macro", CamLock="Cam Lock",
+		GunOnly="Solo Arma", KnifeOnly="Solo Cuchillo", StretchScreen="Estirar Pantalla", Esp="ESP", Names="Nombres",
+		Line="Linea", Studs="Studs", ChangeMyName="Cambiar Mi Nombre", ChangeAllName="Cambiar Todos los Nombres",
+		KillSound="Sonido de Kill", Sound="Sonido", Volume="Volumen", SoloMe="Solo Yo", ShootSound="Sonido de Disparo",
+		KillEffect="Efecto de Kill", Effect="Efecto", WalkSpeed="Velocidad", Fly="Volar", Speed="Velocidad",
+		Fps="FPS", Ping="Ping", FpsBoost="Boost FPS", RemoveAccessories="Quitar Accesorios",
+		RemoveAnimations="Quitar Animaciones", Skybox="Skybox", Sky="Cielo", Language="Idioma", Apply="Aplicar",
+		LockPosition="Bloquear Posicion", Invisible="Invisible", KnifeAura="Aura Cuchillo", Bajar="Bajar/Subir",
+		BtnAutoShot="Auto", BtnSilent="Silent", BtnAura="Aura", BtnInv="Inv",
+		BtnCam="Cam", BtnFly="Fly", BtnBajar="Bajar",
+		NotifyLang="Idioma aplicado.",
+		WarnFov="AutoShot y Silent Aim necesitan FOV activado!",
+		Head="Cabeza", Torso="Torso", FullBody="Cuerpo",
+		SkinPlaceholder="pon el usuario", SkinApply="Apply", SkinRemove="Remove", SkinR15="R15", SkinR6="R6",
+		SkinApplied="Skin aplicada", SkinRemoved="Skin removida", SkinNotFound="Usuario no encontrado", SkinWaitChar="Esperando personaje",
+	},
+}
+local function T(key)
+	local pack = Locale[LANG] or Locale.en
+	return pack[key] or Locale.en[key] or key
+end
+local pendingLang = LANG
+
+local LANG_FIXED = { English = true, Spanish = true, ["Español"] = true }
+
+local function buildLangRemap(toLang)
+	local newPack = Locale[toLang] or Locale.en
+	local remap = {}
+	for _, pack in pairs(Locale) do
+		for k, oldVal in pairs(pack) do
+			local newVal = newPack[k]
+			if newVal and oldVal ~= newVal and not LANG_FIXED[oldVal] then
+				remap[oldVal] = newVal
+			end
+		end
+	end
+	return remap
+end
+
+local function patchGuiLanguage(toLang)
+	local remap = buildLangRemap(toLang)
+	local function patch(root)
+		if not root then return end
+		for _, d in ipairs(root:GetDescendants()) do
+			pcall(function()
+				if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+					local t = d.Text
+					if not t or LANG_FIXED[t] then return end
+					if remap[t] then d.Text = remap[t] end
+				end
+			end)
+		end
+	end
+	local targets = { game:GetService("CoreGui") }
+	if gethui then pcall(function() table.insert(targets, gethui()) end) end
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then table.insert(targets, pg) end
+	for _, r in ipairs(targets) do patch(r) end
+end
+
+local function applyLanguage(toLang)
+	if toLang ~= "en" and toLang ~= "es" then toLang = "en" end
+	LANG = toLang
+	pendingLang = toLang
+	if getgenv then getgenv().XitadoLang = toLang end
+	patchGuiLanguage(toLang)
+	if Extras and Extras.ApplyButtonLanguage then
+		pcall(Extras.ApplyButtonLanguage)
+	end
+end
+
 
 local teamState = { Snapshot = {}, LastRefresh = 0, RefreshInterval = 0.12 }
 
@@ -209,9 +329,9 @@ local autoEquip = {
     Respetar25Silent       = false,
     LastHolsterAt = 0
 }
-local espEnemy  = { Enabled = true,  Names = false, Line = false, Studs = false, Color = Color3.fromRGB(255, 140, 140) }
-local espAlly   = { Enabled = false, Names = false, Line = false, Studs = false, Color = Color3.fromRGB(140, 255, 160) }
-local nameChange = { MyName = false, AllNames = false, Replacement = "xitado", Transform = function(text) return text end }
+local espEnemy  = { Enabled = true,  Names = false, Line = false, Studs = false, Color = Color3.fromRGB(210, 70, 70) }
+local espAlly   = { Enabled = false, Names = false, Line = false, Studs = false, Color = Color3.fromRGB(70, 200, 100) }
+local nameChange = { MyName = true, AllNames = false, Replacement = "xitado", Transform = function(text) return text end }
 
 local KillSounds = {
     ["Sword Hit"]       = 140462043853173,
@@ -224,12 +344,17 @@ local KillSounds = {
     ["Among Us"]        = 7227567562,
     ["Mambo"]           = 138707899268973,
     ["Sata Andagi"]     = 109412872124861,
+    ["Magia de Anime"]  = 109296938403067,
 }
 local killSound = { Enabled = false, Selected = "Sata Andagi", Volume = 2.5, SoloYo = false, Options = {}, Connections = {} }
 for name in pairs(KillSounds) do table.insert(killSound.Options, name) end
 table.sort(killSound.Options)
 
-local ShootReloadOptions = { ["Magia de Anime"] = { Shoot = "109296938403067", Reload = nil } }
+local ShootReloadOptions = {
+    ["Magia de Anime"] = { Shoot = "109296938403067", Reload = nil },
+    ["Sword Hit"]      = { Shoot = "140462043853173", Reload = nil },
+    ["TF2"]            = { Shoot = "2866718318", Reload = nil },
+}
 local shootSound = { Enabled = false, Selected = "Magia de Anime", Volume = 2.5, Options = {} }
 for name in pairs(ShootReloadOptions) do table.insert(shootSound.Options, name) end
 table.sort(shootSound.Options)
@@ -379,7 +504,7 @@ Workspace.DescendantAdded:Connect(function(d) if killSound.Enabled and d:IsA("So
 SoundService.DescendantAdded:Connect(function(d) if killSound.Enabled and d:IsA("Sound") then task.defer(muteDeathSound, d) end end)
 
 local skybox = {
-    Current = "Sakura Pink Sky",
+    Current = "Space Wave 2",
     Data = {
         ["Among Us"]       = {"5752463190","5752463190","5752463190","5752463190","5752463190","5752463190"},
         Blaze              = {"150939022","150939038","150939047","150939056","150939063","150939082"},
@@ -527,6 +652,52 @@ end
 local autoForceAim = { active = false, pos = nil, untilT = 0 }
 
 local function installMouseHook()
+
+-- Silent Aim + AutoShot shared target (01 Rox / Clan Xitados style)
+getgenv().XitadosTargetPart = nil
+local silentNamecallInstalled = false
+if typeof(hookmetamethod) == "function" and typeof(getnamecallmethod) == "function" then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure and newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local target = getgenv().XitadosTargetPart
+        if target and target.Parent and (not checkcaller or not checkcaller()) then
+            if method == "Raycast" and self == Workspace then
+                local origin, direction, p3 = ...
+                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude >= 20 then
+                    local cam = Workspace.CurrentCamera
+                    local camPos = cam and cam.CFrame.Position
+                    if not camPos or (origin - camPos).Magnitude >= 0.5 then
+                        local newDir = (target.Position - origin)
+                        if newDir.Magnitude > 0.001 then
+                            newDir = newDir.Unit * math.max(direction.Magnitude, 5000)
+                            return oldNamecall(self, origin, newDir, p3)
+                        end
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end) or function(self, ...)
+        local method = getnamecallmethod()
+        local target = getgenv().XitadosTargetPart
+        if target and target.Parent and (not checkcaller or not checkcaller()) then
+            if method == "Raycast" and self == Workspace then
+                local origin, direction, p3 = ...
+                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude >= 20 then
+                    local newDir = (target.Position - origin)
+                    if newDir.Magnitude > 0.001 then
+                        newDir = newDir.Unit * math.max(direction.Magnitude, 5000)
+                        return oldNamecall(self, origin, newDir, p3)
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    silentNamecallInstalled = true
+end
+
     if not (GRMT and SRO) then return false end
     local ok = pcall(function()
         local mt = GRMT(mouse)
@@ -579,31 +750,66 @@ end
 if player.Character then bindDeath(player.Character) end
 player.CharacterAdded:Connect(function(c) SilentIsDead = true; bindDeath(c) end)
 
--- forced aim for AutoShot (mobile-safe: overrides touch click direction)
+-- AutoShot (Clan Xitados normal style): set shared target + Activate
+task.spawn(function()
+    local lastShoot = 0
+    while not destroyed do
+        task.wait(0.08)
+        if not autoShoot.Enabled or autoEquip.Busy or isInLobby() or SilentIsDead then
+            if not silentAim.Enabled then getgenv().XitadosTargetPart = nil end
+            continue
+        end
+        local char = player.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not hum or hum.Health <= 0 or not root then continue end
+        local weapon = char:FindFirstChildOfClass("Tool")
+        if not weapon or not isGun(weapon) then
+            if not silentAim.Enabled then getgenv().XitadosTargetPart = nil end
+            continue
+        end
+        local part, point = getBestTarget(autoShoot.TargetPart, autoShoot.FOVSize)
+        if not part then
+            if not silentAim.Enabled then getgenv().XitadosTargetPart = nil end
+            continue
+        end
+        getgenv().XitadosTargetPart = part
+        if point then
+            autoForceAim.pos = point
+            autoForceAim.active = true
+            autoForceAim.untilT = os.clock() + 0.15
+        end
+        if os.clock() - lastShoot < 0.08 then continue end
+        lastShoot = os.clock()
+        pcall(function()
+            weapon:Activate()
+            task.delay(0.03, function()
+                if weapon.Parent == char then weapon:Deactivate() end
+            end)
+        end)
+    end
+end)
+
+-- Silent Aim target updater (01 Rox style)
 task.spawn(function()
     while not destroyed do
-        if autoShoot.Enabled and not autoEquip.Busy and not isInLobby() and not SilentIsDead then
-            local char = player.Character
-            if char then
-                local weapon = char:FindFirstChildOfClass("Tool")
-                if weapon and isGun(weapon) then
-                    local part, point = getBestTarget(autoShoot.TargetPart, autoShoot.FOVSize)
-                    if part and point then
-                        -- lock mouse.Hit / aim to target for a short window so mobile touch does not redirect the shot
-                        autoForceAim.pos = point
-                        autoForceAim.active = true
-                        autoForceAim.untilT = os.clock() + 0.12
-                        pcall(function()
-                            weapon:Activate()
-                            task.delay(0.03, function()
-                                if weapon.Parent == char then weapon:Deactivate() end
-                            end)
-                        end)
-                    end
-                end
-            end
+        task.wait(0.03)
+        if not silentAim.Enabled or isInLobby() or SilentIsDead then
+            if not autoShoot.Enabled then getgenv().XitadosTargetPart = nil end
+            continue
         end
-        task.wait(0.08)
+        local part = getBestTarget(silentAim.TargetPart, silentAim.FOVSize)
+        if part then
+            getgenv().XitadosTargetPart = part
+            if autoForceAim then
+                autoForceAim.pos = part.Position
+                autoForceAim.active = true
+                autoForceAim.untilT = os.clock() + 0.08
+            end
+        else
+            if not autoShoot.Enabled then getgenv().XitadosTargetPart = nil end
+        end
     end
 end)
 
@@ -7241,6 +7447,33 @@ return dmvsVisualEffectBuilders
 end)()
 
 
+local function paintAndFreezeBody(model, hum, color, material)
+    if not model or not model.Parent then return end
+    color = color or Color3.fromRGB(135, 206, 250)
+    material = material or Enum.Material.SmoothPlastic
+    for _, d in ipairs(model:GetDescendants()) do
+        pcall(function()
+            if d:IsA("BasePart") then
+                d.Anchored = true
+                d.AssemblyLinearVelocity = Vector3.zero
+                d.AssemblyAngularVelocity = Vector3.zero
+                d.Color = color
+                d.Material = material
+                d.Reflectance = 0
+                if d.Transparency > 0 and d.Transparency < 1 then d.Transparency = 0 end
+                if d:IsA("MeshPart") then d.TextureID = "" end
+            elseif d:IsA("JointInstance") or d:IsA("WeldConstraint") then
+                if d.Enabled then d.Enabled = false end
+            elseif d:IsA("Shirt") or d:IsA("Pants") or d:IsA("ShirtGraphic") or d:IsA("BodyColors")
+                or d:IsA("SurfaceAppearance") or d:IsA("Decal") or d:IsA("Texture")
+                or d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
+                or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") or d:IsA("Highlight") then
+                d.Parent = nil
+            end
+        end)
+    end
+end
+
 local function emitKillFX(body)
     if not KillFX.Enabled then return end
     if typeof(body) ~= "Instance" or not body:IsA("Model") then return end
@@ -7283,6 +7516,12 @@ local function emitKillFX(body)
                 end
             end
         end
+        -- body freeze / recolor for specific effects
+        if KillFX.Style == "Frostbite" then
+            paintAndFreezeBody(body, hum, Color3.fromRGB(40, 90, 160), Enum.Material.Ice)
+        elseif KillFX.Style == "SpiritOverload" then
+            paintAndFreezeBody(body, hum, Color3.fromRGB(20, 55, 25), Enum.Material.SmoothPlastic)
+        end
         return
     end
     local source = killFXSource(entry)
@@ -7303,92 +7542,218 @@ local function emitKillFX(body)
 end
 
 local function isCreatorLocalPlayer(character)
-    local tag = character:FindFirstChild("Creator")
-    if tag and tag:IsA("ObjectValue") and tag.Value then
-        if tag.Value == player then return true end
-        if tag.Value:IsA("Player") and tag.Value.Name == MY_ROBLOX_NAME then return true end
-    end
-    for _, tagName in ipairs({"creator","KilledBy"}) do
-        local sv = character:FindFirstChild(tagName)
-        if sv and sv:IsA("StringValue") then if sv.Value == MY_ROBLOX_NAME then return true end end
-    end
-    return false
+	if not character then return false end
+	local function matchesPlayer(v)
+		if v == nil then return false end
+		if v == player then return true end
+		if typeof(v) == "number" and v == player.UserId then return true end
+		if typeof(v) == "string" then
+			local s = string.lower(v)
+			return s == string.lower(MY_ROBLOX_NAME) or s == string.lower(player.DisplayName) or s == tostring(player.UserId)
+		end
+		if typeof(v) == "Instance" then
+			if v:IsA("Player") then
+				return v == player or v.UserId == player.UserId or v.Name == MY_ROBLOX_NAME
+			end
+			if v:IsA("Model") then
+				local p = Players:GetPlayerFromCharacter(v)
+				return p == player
+			end
+		end
+		return false
+	end
+	local function checkTag(tag)
+		if not tag then return false end
+		if tag:IsA("ObjectValue") then return matchesPlayer(tag.Value) end
+		if tag:IsA("StringValue") then return matchesPlayer(tag.Value) end
+		if tag:IsA("IntValue") or tag:IsA("NumberValue") then return matchesPlayer(tag.Value) end
+		return false
+	end
+	local names = {"Creator", "creator", "KilledBy", "LastHit", "Attacker", "Killer", "DamageOwner"}
+	for _, name in ipairs(names) do
+		local tag = character:FindFirstChild(name, true)
+		if checkTag(tag) then return true end
+	end
+	local hum = character:FindFirstChildOfClass("Humanoid")
+	if hum then
+		for _, name in ipairs(names) do
+			local tag = hum:FindFirstChild(name)
+			if checkTag(tag) then return true end
+		end
+	end
+	for _, attr in ipairs({"Creator", "KilledBy", "LastHit", "Attacker", "Killer"}) do
+		if matchesPlayer(character:GetAttribute(attr)) then return true end
+		if hum and matchesPlayer(hum:GetAttribute(attr)) then return true end
+	end
+	return false
 end
 
 local function playKillSound()
-    if not killSound.Enabled or destroyed then return end
-    local id = KillSounds[killSound.Selected]; if not id then return end
-    local s = Instance.new("Sound"); s.Name = "Xitado_KillSound"
-    s.SoundId = "rbxassetid://"..tostring(id); s.Volume = killSound.Volume or 2.5; s.Parent = SoundService
-    s:Play(); s.Ended:Connect(function() s:Destroy() end); Debris:AddItem(s, 12)
+	if not killSound.Enabled or destroyed then return end
+	local id = KillSounds[killSound.Selected]; if not id then return end
+	local s = Instance.new("Sound"); s.Name = "Xitado_KillSound"
+	s.SoundId = "rbxassetid://"..tostring(id); s.Volume = killSound.Volume or 2.5; s.Parent = SoundService
+	s:Play(); s.Ended:Connect(function() s:Destroy() end); Debris:AddItem(s, 12)
 end
 
-local LOCAL_HIT_WINDOW = 1.5; local AIM_CONE_DOT = math.cos(math.rad(20))
-local localDamagedChars = setmetatable({},{__mode="k"})
-local GUN_HOLSTER_GRACE = 1.0; local lastGunHolsteredAt = { t = 0 }
+local LOCAL_HIT_WINDOW = 2.75
+local AIM_CONE_DOT = math.cos(math.rad(35))
+local localDamagedChars = setmetatable({}, { __mode = "k" })
+local GUN_HOLSTER_GRACE = 1.25
+local lastGunHolsteredAt = { t = 0 }
+local lastToolAttackAt = { t = 0 }
+local pendingDeath = setmetatable({}, { __mode = "k" })
+
+local function markLocalDamage(char)
+	if char then localDamagedChars[char] = tick() end
+end
+
 local function watchLocalGun(char)
-    if not char then return end
-    char.ChildRemoved:Connect(function(child) if child:IsA("Tool") and isGun(child) then lastGunHolsteredAt.t = tick() end end)
+	if not char then return end
+	char.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") and (isGun(child) or isKnife(child)) then
+			lastGunHolsteredAt.t = tick()
+		end
+	end)
+	local function hookTool(tool)
+		if not tool or not tool:IsA("Tool") then return end
+		tool.Activated:Connect(function()
+			lastToolAttackAt.t = tick()
+			local cam = Workspace.CurrentCamera
+			if not cam then return end
+			local best, bestDot = nil, AIM_CONE_DOT
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= player and plr.Character then
+					local root = plr.Character:FindFirstChild("HumanoidRootPart")
+					local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+					if root and hum and hum.Health > 0 then
+						local to = root.Position - cam.CFrame.Position
+						if to.Magnitude < 250 and to.Magnitude > 0.05 then
+							local dot = cam.CFrame.LookVector:Dot(to.Unit)
+							if dot >= bestDot then bestDot = dot; best = plr.Character end
+						end
+					end
+				end
+			end
+			if best then markLocalDamage(best) end
+		end)
+	end
+	for _, child in ipairs(char:GetChildren()) do hookTool(child) end
+	char.ChildAdded:Connect(hookTool)
 end
 if player.Character then watchLocalGun(player.Character) end
 player.CharacterAdded:Connect(watchLocalGun)
 
 local function isLocalAimingAt(char)
-    local cam = Workspace.CurrentCamera; if not cam then return false end
-    local root = char:FindFirstChild("HumanoidRootPart"); if not root then return false end
-    local toTarget = (root.Position - cam.CFrame.Position).Unit
-    return cam.CFrame.LookVector:Dot(toTarget) >= AIM_CONE_DOT
+	local cam = Workspace.CurrentCamera; if not cam then return false end
+	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return false end
+	local toTarget = root.Position - cam.CFrame.Position
+	if toTarget.Magnitude < 1e-3 then return true end
+	return cam.CFrame.LookVector:Dot(toTarget.Unit) >= AIM_CONE_DOT
+end
+
+local function isLocalNear(char)
+	local myChar = player.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not myRoot or not root then return false end
+	return (myRoot.Position - root.Position).Magnitude <= 22
 end
 
 local function watchEnemyHealth(char)
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-    local lastHP = hum.Health
-    char.ChildAdded:Connect(function(child)
-        if child.Name=="Creator" or child.Name=="creator" or child.Name=="KilledBy" then
-            local sv = child:IsA("StringValue") and child.Value or nil
-            local ov = child:IsA("ObjectValue") and child.Value or nil
-            local isOther = (sv and sv~=MY_ROBLOX_NAME) or (ov and ov~=player)
-            if isOther then localDamagedChars[char] = nil end
-        end
-    end)
-    hum.HealthChanged:Connect(function(newHP)
-        if newHP >= lastHP then lastHP = newHP; return end; lastHP = newHP
-        local myChar = player.Character; local tool = myChar and myChar:FindFirstChildOfClass("Tool")
-        local gunReady = (tool and isGun(tool)) or (tick()-lastGunHolsteredAt.t) <= GUN_HOLSTER_GRACE
-        if gunReady and isLocalAimingAt(char) then localDamagedChars[char] = tick() end
-    end)
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+	local lastHP = hum.Health
+	char.ChildAdded:Connect(function(child)
+		local n = child.Name
+		if n == "Creator" or n == "creator" or n == "KilledBy" or n == "LastHit" or n == "Attacker" or n == "Killer" then
+			if isCreatorLocalPlayer(char) then
+				markLocalDamage(char)
+			else
+				local sv = child:IsA("StringValue") and child.Value or nil
+				local ov = child:IsA("ObjectValue") and child.Value or nil
+				local isOther = (sv and sv ~= MY_ROBLOX_NAME and sv ~= player.DisplayName and tostring(sv) ~= tostring(player.UserId))
+					or (ov and ov ~= player and not (typeof(ov) == "Instance" and ov:IsA("Player") and ov.UserId == player.UserId))
+				if isOther then localDamagedChars[char] = nil end
+			end
+		end
+	end)
+	hum.HealthChanged:Connect(function(newHP)
+		if newHP >= lastHP then lastHP = newHP; return end
+		lastHP = newHP
+		local myChar = player.Character
+		local tool = myChar and myChar:FindFirstChildOfClass("Tool")
+		local armed = (tool and (isGun(tool) or isKnife(tool)))
+			or (tick() - lastGunHolsteredAt.t) <= GUN_HOLSTER_GRACE
+			or (tick() - lastToolAttackAt.t) <= 0.6
+		if not armed then return end
+		if isLocalAimingAt(char) or isLocalNear(char) or (tick() - lastToolAttackAt.t) <= 0.6 then
+			markLocalDamage(char)
+		end
+	end)
 end
 
 local function didLocalPlayerKill(character)
-    if isCreatorLocalPlayer(character) then return true end
-    local t = localDamagedChars[character]
-    if t and (tick()-t) <= LOCAL_HIT_WINDOW then return true end
-    return false
+	if isCreatorLocalPlayer(character) then return true end
+	local t = localDamagedChars[character]
+	if t and (tick() - t) <= LOCAL_HIT_WINDOW then return true end
+	return false
 end
 
--- ✅ FIX 4: onEnemyDied now checks isInMyMatch so foreign-match deaths are ignored
--- SoloYo=false → fires for allies+enemies in MY match only, not foreign matches
+local function resolveLocalKill(character)
+	if didLocalPlayerKill(character) then return true end
+	for _ = 1, 12 do
+		task.wait(0.05)
+		if isCreatorLocalPlayer(character) then
+			markLocalDamage(character)
+			return true
+		end
+	end
+	return didLocalPlayerKill(character)
+end
+
 local function onEnemyDied(victimPlayer, character)
-    if destroyed then return end
-    -- ✅ always skip players not in our match (foreign lobbies/matches)
-    if victimPlayer and not isInMyMatch(victimPlayer) then return end
-    -- SoloYo=true → additionally restrict to kills by local player only
-    if killSound.SoloYo or KillFX.SoloYo then
-        if not didLocalPlayerKill(character) then return end
-    end
-    playKillSound(); emitKillFX(character)
+	if destroyed or not character then return end
+	if pendingDeath[character] then return end
+	pendingDeath[character] = true
+	task.spawn(function()
+		if victimPlayer and not isInMyMatch(victimPlayer) then
+			pendingDeath[character] = nil
+			return
+		end
+		local needMine = (killSound.Enabled and killSound.SoloYo) or (KillFX.Enabled and KillFX.SoloYo)
+		local isMine = false
+		if needMine then
+			isMine = resolveLocalKill(character)
+		end
+		if killSound.Enabled then
+			if (not killSound.SoloYo) or isMine then
+				playKillSound()
+			end
+		end
+		if KillFX.Enabled then
+			if (not KillFX.SoloYo) or isMine then
+				emitKillFX(character)
+			end
+		end
+		task.wait(1)
+		pendingDeath[character] = nil
+	end)
 end
 
 local function bindKillDetection(plr, char)
-    if plr == player or not char then return end
-    local data = killSound.Connections[plr] or {}
-    if data.humConn then data.humConn:Disconnect() end
-    local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
-    if not hum then return end
-    watchEnemyHealth(char)
-    data.humConn = hum.Died:Connect(function() onEnemyDied(plr, char) end)
-    killSound.Connections[plr] = data
+	if plr == player or not char then return end
+	local data = killSound.Connections[plr] or {}
+	if data.humConn then data.humConn:Disconnect() end
+	if data.hpConn then data.hpConn:Disconnect() end
+	local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	watchEnemyHealth(char)
+	data.humConn = hum.Died:Connect(function() onEnemyDied(plr, char) end)
+	data.hpConn = hum.HealthChanged:Connect(function(h)
+		if h <= 0 then onEnemyDied(plr, char) end
+	end)
+	killSound.Connections[plr] = data
 end
 
 for _, plr in ipairs(Players:GetPlayers()) do
@@ -7816,20 +8181,31 @@ end)
 -- ═══════════════════════════════════════════════════════════════
 --  STRETCH SCREEN
 -- ═══════════════════════════════════════════════════════════════
-local stretchConn = nil; local stretchEnabled = false; local STRETCH_FACTOR = 1.6
-local function SetStretched(value)
-    if value then
-        if stretchConn then return end
-        stretchEnabled = true
-        stretchConn = RunService.RenderStepped:Connect(function()
-            local cam = Workspace.CurrentCamera
-            if not cam then return end
-            local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cam.CFrame:GetComponents()
-            cam.CFrame = CFrame.new(x, y, z, r00 * STRETCH_FACTOR, r01, r02, r10, r11, r12, r20 * STRETCH_FACTOR, r21, r22)
-        end)
+local stretchEnabled = false; local STRETCH_FACTOR = 1.6
+local STRETCH_BIND = "XitadosStretchScreen"
+local function stretchStep()
+    if not stretchEnabled then return end
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local cf = cam.CFrame
+    local look = cf.LookVector
+    if look.Magnitude < 1e-4 then return end
+    look = look.Unit
+    local up = Vector3.new(0, 1, 0)
+    local right = look:Cross(up)
+    if right.Magnitude < 1e-4 then
+        right = cf.RightVector.Unit
     else
-        stretchEnabled = false
-        if stretchConn then stretchConn:Disconnect(); stretchConn = nil end
+        right = right.Unit
+    end
+    local realUp = right:Cross(look).Unit
+    cam.CFrame = CFrame.fromMatrix(cf.Position, right * STRETCH_FACTOR, realUp, -look)
+end
+local function SetStretched(value)
+    stretchEnabled = value == true
+    pcall(function() RunService:UnbindFromRenderStep(STRETCH_BIND) end)
+    if stretchEnabled then
+        RunService:BindToRenderStep(STRETCH_BIND, Enum.RenderPriority.Last.Value, stretchStep)
     end
 end
 
@@ -8155,6 +8531,7 @@ local Extras = (function()
     local floatConns={}; local buttonDefs,buttons={},{}; local pollConn,pollAcc=nil,0
     local isMobile=UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
     local BUTTON_SIZE=62; local BUTTON_GAP=6
+    local buttonsLocked=false
 
     local function getSlotLayout(slot)
         if not isMobile then
@@ -8200,6 +8577,7 @@ local Extras = (function()
             end
         end)
         table.insert(floatConns, UserInputService.InputChanged:Connect(function(input)
+            if buttonsLocked then return end
             if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
                 local delta=input.Position-dragStart
                 if delta.Magnitude>5 then moved=true; btn.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y) end
@@ -8228,6 +8606,16 @@ local Extras = (function()
 
     function M.RefreshButtons() refreshButtons() end
     function M.RegisterButton(id, def) buttonDefs[id]=def end
+    function M.SetButtonsLocked(on) buttonsLocked = on == true end
+    function M.IsButtonsLocked() return buttonsLocked end
+    function M.ApplyButtonLanguage()
+        for id, fb in pairs(buttons) do
+            local def = buttonDefs[id]
+            if def and fb and fb.Button and fb.Button.Parent then
+                pcall(function() fb.Button.Text = def.text end)
+            end
+        end
+    end
 
     function M.SetButtonVisible(id, on)
         on=on==true; local def=buttonDefs[id]; if not def then return end
@@ -8403,45 +8791,7 @@ local function doSubir()
     destroyBajarFloor(); bajarState.Enabled = false; bajarState.ActivationPos = nil
 end
 
--- AUTO KILL removed
-
--- ═══════════════════════════════════════════════════════════════
---  KILL ALL
--- ═══════════════════════════════════════════════════════════════
-local KILLALL_SWING_INTERVAL = 0.07
-local KillAllState = { Conn = nil, Acc = 0 }
-
-local function startKillAll()
-    if KillAllState.Conn then KillAllState.Conn:Disconnect() end
-    KillAllState.Acc = 0
-    if not Extras.IsKnifeAura() then
-        Extras.SetKnifeAuraEnabled(true)
-    end
-    KillAllState.Conn = RunService.Heartbeat:Connect(function(dt)
-        if not KillAllState.Conn then return end
-        KillAllState.Acc = KillAllState.Acc + dt
-        if KillAllState.Acc < KILLALL_SWING_INTERVAL then return end
-        KillAllState.Acc = 0
-        local char = player.Character; if not char then return end
-        local myHum = char:FindFirstChildOfClass("Humanoid")
-        if not myHum or myHum.Health <= 0 then return end
-        local tool = char:FindFirstChildOfClass("Tool")
-        if not (tool and isKnife(tool)) then return end
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if isEnemy(plr) and plr.Character then
-                local eHum  = plr.Character:FindFirstChildOfClass("Humanoid")
-                local eRoot = plr.Character:FindFirstChild("HumanoidRootPart")
-                if eHum and eHum.Health > 0 and eRoot then
-                    Extras.SwingKnifeAt(eRoot)
-                end
-            end
-        end
-    end)
-end
-
-local function stopKillAll()
-    if KillAllState.Conn then KillAllState.Conn:Disconnect(); KillAllState.Conn = nil end
-end
+-- AUTO KILL / KILL ALL removed
 
 -- ═══════════════════════════════════════════════════════════════
 --  PERFORMANCE HUD
@@ -8571,58 +8921,132 @@ task.spawn(function()
     end
 end)
 
--- ═══════════════════════════════════════════════════════════════
---  UNLOAD HUB  ✅ FIX 3: manual full teardown function
--- ═══════════════════════════════════════════════════════════════
-local function UnloadHub()
+local function onHubDestroy()
     destroyed = true
     autoEventFarm.Active = false
     SetStretched(false)
-    nameChange.MyName = false; nameChange.AllNames = false; pcall(refreshAllNames)
-    Extras.Cleanup()
+    pcall(function() Extras.Cleanup() end)
     clearHitboxes()
-    restoreSky()
+    pcall(restoreSky)
     setKillSoundMute(false)
     if freezeKillStop then pcall(freezeKillStop) end
-    stopKillAll()
     if bajarState.Enabled then doSubir() end
     if accessoryRemove.Enabled then stopAccessoryRemove() end
     if animRemove.Enabled then stopAnimRemove() end
-    -- disable all features
-    autoShoot.Enabled  = false
-    silentAim.Enabled  = false
-    hitbox.Enabled     = false
-    TriggerEnabled     = false
-    macroEnabled       = false
-    camlockEnabled     = false
-    espEnemy.Enabled   = false
-    espAlly.Enabled    = false
-    killSound.Enabled  = false
-    shootSound.Enabled = false
-    KillFX.Enabled     = false
-    -- clean FOV circles
-    pcall(function() autoFOV.Gui:Destroy()   end)
+    autoShoot.Enabled = false; silentAim.Enabled = false; hitbox.Enabled = false
+    TriggerEnabled = false; macroEnabled = false; camlockEnabled = false
+    espEnemy.Enabled = false; espAlly.Enabled = false
+    killSound.Enabled = false; shootSound.Enabled = false; KillFX.Enabled = false
+    pcall(function() autoFOV.Gui:Destroy() end)
     pcall(function() silentFOV.Gui:Destroy() end)
-    -- clean ESP
     pcall(function() espFolder:Destroy() end)
     for plr in pairs(activeESPs) do cleanESP(plr) end
-    -- clean perf HUD
     if perfHUD.Conn then pcall(function() perfHUD.Conn:Disconnect() end) end
-    if perfHUD.Gui  then pcall(function() perfHUD.Gui:Destroy()     end) end
-    -- clean shoot sounds
+    if perfHUD.Gui then pcall(function() perfHUD.Gui:Destroy() end) end
     pcall(function() ShootSoundPlayer:Stop(); ShootSoundPlayer:Destroy() end)
     pcall(function() ReloadSoundPlayer:Stop(); ReloadSoundPlayer:Destroy() end)
     for _, c in ipairs(xitadosShootConnections) do pcall(function() c:Disconnect() end) end
     table.clear(xitadosShootConnections)
-    -- destroy the window UI itself
-    pcall(function() window:Destroy() end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  LANGUAGE PROMPT (before UI)
+-- ═══════════════════════════════════════════════════════════════
+do
+	local picked = nil
+	local parent = game:GetService("CoreGui")
+	if gethui then
+		local ok, h = pcall(gethui)
+		if ok and h then parent = h end
+	end
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "XitadoLangPrompt"
+	sg.IgnoreGuiInset = true
+	sg.ResetOnSpawn = false
+	sg.DisplayOrder = 2147483647
+	sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	sg.Parent = parent
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = sg
+
+	local card = Instance.new("Frame")
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.Position = UDim2.fromScale(0.5, 0.5)
+	card.Size = UDim2.fromOffset(340, 210)
+	card.BackgroundColor3 = Color3.fromRGB(18, 22, 32)
+	card.BorderSizePixel = 0
+	card.Parent = sg
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 14)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(60, 90, 140)
+	stroke.Thickness = 1.5
+	stroke.Parent = card
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.new(1, -24, 0, 36)
+	title.Position = UDim2.fromOffset(12, 16)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 20
+	title.TextColor3 = Color3.fromRGB(240, 245, 255)
+	title.Text = "Select language"
+	title.Parent = card
+
+	local hint = Instance.new("TextLabel")
+	hint.BackgroundTransparency = 1
+	hint.Size = UDim2.new(1, -24, 0, 44)
+	hint.Position = UDim2.fromOffset(12, 52)
+	hint.Font = Enum.Font.Gotham
+	hint.TextSize = 13
+	hint.TextColor3 = Color3.fromRGB(170, 185, 210)
+	hint.TextWrapped = true
+	hint.TextXAlignment = Enum.TextXAlignment.Left
+	hint.TextYAlignment = Enum.TextYAlignment.Top
+	hint.Text = "You can change it anytime in the Extras tab at the bottom."
+	hint.Parent = card
+
+	local function makeBtn(text, y, langCode)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(1, -24, 0, 40)
+		b.Position = UDim2.fromOffset(12, y)
+		b.BackgroundColor3 = Color3.fromRGB(32, 48, 78)
+		b.BorderSizePixel = 0
+		b.AutoButtonColor = true
+		b.Font = Enum.Font.GothamBold
+		b.TextSize = 16
+		b.TextColor3 = Color3.fromRGB(235, 240, 255)
+		b.Text = text
+		b.Parent = card
+		Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+		b.MouseButton1Click:Connect(function()
+			picked = langCode
+		end)
+		return b
+	end
+	makeBtn("English", 110, "en")
+	makeBtn("Español", 158, "es")
+
+	while picked == nil and not destroyed do
+		task.wait()
+	end
+	pcall(function() sg:Destroy() end)
+	if picked then
+		LANG = picked
+		pendingLang = picked
+		if getgenv then getgenv().XitadoLang = picked end
+	end
 end
 
 -- ═══════════════════════════════════════════════════════════════
 --  WINDOW
 -- ═══════════════════════════════════════════════════════════════
 local window = Rayfield:CreateWindow({
-    name="Xitado Hub", subtitle="Duels - Mvsd", sidebarLayout=true, theme="rose"
+    name="Xitado Hub", subtitle="Duels - Mvsd", sidebarLayout=true, theme="Cobalt"
 })
 
 task.spawn(function()
@@ -8694,6 +9118,42 @@ Extras.Notify = function(text, title)
     pcall(function() window:Notify({ title=title or "Xitado Hub", content=text, duration=5, image="zap" }) end)
 end
 
+local modNotified = setmetatable({}, { __mode = "k" })
+local function isMod(p)
+    if not p or p == player then return false end
+    if CollectionService:HasTag(p, "Admin") then return true end
+    local a = p:GetAttribute("Admin")
+    if a == true then return true end
+    if type(a) ~= "string" then return false end
+    a = a:match("^%s*(.-)%s*$")
+    if not a then return false end
+    a = a:lower()
+    return a == "admin" or a == "moderator"
+end
+local function notifyMod(p)
+    if not p or modNotified[p] then return end
+    modNotified[p] = true
+    Extras.Notify("Moderator Detected @" .. p.Name, "WARNING !!!")
+end
+task.spawn(function()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isMod(p) then notifyMod(p) end
+    end
+    Players.PlayerAdded:Connect(function(p)
+        task.wait(1.5)
+        if isMod(p) then notifyMod(p) end
+        p:GetAttributeChangedSignal("Admin"):Connect(function()
+            if isMod(p) then notifyMod(p) end
+        end)
+    end)
+    while not destroyed do
+        for _, p in ipairs(Players:GetPlayers()) do
+            if isMod(p) then notifyMod(p) end
+        end
+        task.wait(3)
+    end
+end)
+
 -- ═══════════════════════════════════════════════════════════════
 --  FEAT TABLE
 -- ═══════════════════════════════════════════════════════════════
@@ -8716,16 +9176,6 @@ Feat.Bajar = {
     get=function() return bajarState.Enabled end,
     set=function(v) if v then doBajar() else doSubir() end end
 }
-Feat.KillAll = { Enabled=false, Logic=nil }
-Feat.KillAll.get = function() return Feat.KillAll.Enabled end
-Feat.KillAll.set = function(v)
-    local logic=Feat.KillAll.Logic
-    if not logic then Extras.Notify("Kill All: sin logica"); return end
-    local ok,err=pcall(v and logic.On or logic.Off)
-    if ok then Feat.KillAll.Enabled=v else Extras.Notify("Kill All fallo: "..tostring(err)) end
-end
-
-Feat.KillAll.Logic = { On = startKillAll, Off = stopKillAll }
 
 function Feat.Set(name, v)
     local f=Feat[name]; if type(f)~="table" then return end
@@ -8739,172 +9189,284 @@ function Feat.Toggle(name) local f=Feat[name]; if type(f)=="table" then Feat.Set
 -- ═══════════════════════════════════════════════════════════════
 --  FLOATING BUTTONS
 -- ═══════════════════════════════════════════════════════════════
-Extras.RegisterButton("AutoShot",  { text="Auto",   size=18, slot=1, isOn=Feat.AutoShot.get,
+local function btnText(key) return T(key) end
+Extras.RegisterButton("AutoShot",  { text=btnText("BtnAutoShot"), size=14, slot=1, isOn=Feat.AutoShot.get,
     onClick=function()
         Feat.Toggle("AutoShot")
-        if autoShoot.Enabled and not autoShoot.ShowFOV then Extras.Notify("⚠ AutoShot y Silent Aim no funcionan sin FOV!","WARNING") end
+        if autoShoot.Enabled and not autoShoot.ShowFOV then Extras.Notify(T("WarnFov"),"WARNING") end
         Feat.Set("AutoShotFOV", Feat.AutoShot.get())
     end })
-Extras.RegisterButton("SilentAim", { text="Silent", size=15, slot=2, isOn=Feat.SilentAim.get,
+Extras.RegisterButton("SilentAim", { text=btnText("BtnSilent"), size=12, slot=2, isOn=Feat.SilentAim.get,
     onClick=function()
         Feat.Toggle("SilentAim")
-        if silentAim.Enabled and not silentAim.ShowFOV then Extras.Notify("⚠ AutoShot y Silent Aim no funcionan sin FOV!","WARNING") end
+        if silentAim.Enabled and not silentAim.ShowFOV then Extras.Notify(T("WarnFov"),"WARNING") end
         Feat.Set("SilentFOV", Feat.SilentAim.get())
     end })
-Extras.RegisterButton("KnifeAura", { text="Aura",  size=18, slot=3, isOn=Feat.KnifeAura.get, onClick=function() Feat.Toggle("KnifeAura") end })
-Extras.RegisterButton("Invisible", { text="Inv",   size=22, slot=4, isOn=Feat.Invisible.get, onClick=function() Feat.Toggle("Invisible") end })
-Extras.RegisterButton("KillAll",   { text="Kill",  size=20, slot=5, isOn=Feat.KillAll.get,   onClick=function() Feat.Toggle("KillAll")   end })
-Extras.RegisterButton("Camlock",   { text="Cam",   size=20, slot=6, isOn=Feat.Camlock.get,   onClick=function() Feat.Toggle("Camlock")   end })
-Extras.RegisterButton("Fly",       { text="Fly",   size=20, slot=7, isOn=Feat.Fly.get,       onClick=function() Feat.Toggle("Fly")       end })
-Extras.RegisterButton("Bajar",     { text="Bajar", size=16, slot=8, isOn=Feat.Bajar.get,
+Extras.RegisterButton("KnifeAura", { text=btnText("BtnAura"), size=14, slot=3, isOn=Feat.KnifeAura.get, onClick=function() Feat.Toggle("KnifeAura") end })
+Extras.RegisterButton("Invisible", { text=btnText("BtnInv"), size=16, slot=4, isOn=Feat.Invisible.get, onClick=function() Feat.Toggle("Invisible") end })
+Extras.RegisterButton("Camlock",   { text=btnText("BtnCam"), size=14, slot=5, isOn=Feat.Camlock.get, onClick=function() Feat.Toggle("Camlock") end })
+Extras.RegisterButton("Fly",       { text=btnText("BtnFly"), size=16, slot=6, isOn=Feat.Fly.get, onClick=function() Feat.Toggle("Fly") end })
+Extras.RegisterButton("Bajar",     { text=btnText("BtnBajar"), size=12, slot=7, isOn=Feat.Bajar.get,
     onClick=function()
         if bajarState.Enabled then doSubir() else doBajar() end
         Extras.RefreshButtons()
     end })
+-- live language: refresh floating button labels from T()
+local _oldRegister = Extras.RegisterButton
+-- patch ApplyButtonLanguage to re-read T for known ids
+function Extras.ApplyButtonLanguage()
+    local map = {
+        AutoShot="BtnAutoShot", SilentAim="BtnSilent", KnifeAura="BtnAura",
+        Invisible="BtnInv", Camlock="BtnCam", Fly="BtnFly", Bajar="BtnBajar",
+    }
+    for id, key in pairs(map) do
+        local def = nil
+        -- update def text if we can reach buttonDefs via closure; set button text directly via visible scan
+    end
+    -- direct: scan Xitado*Button guis
+    local roots = { game:GetService("CoreGui") }
+    if gethui then pcall(function() table.insert(roots, gethui()) end) end
+    local labels = {
+        AutoShot=T("BtnAutoShot"), SilentAim=T("BtnSilent"), KnifeAura=T("BtnAura"),
+        Invisible=T("BtnInv"), Camlock=T("BtnCam"), Fly=T("BtnFly"), Bajar=T("BtnBajar"),
+    }
+    for _, root in ipairs(roots) do
+        for _, gui in ipairs(root:GetChildren()) do
+            if gui:IsA("ScreenGui") and string.find(gui.Name, "Xitado", 1, true) then
+                for id, label in pairs(labels) do
+                    if string.find(gui.Name, id, 1, true) then
+                        local btn = gui:FindFirstChildWhichIsA("TextButton", true)
+                        if btn then pcall(function() btn.Text = label end) end
+                    end
+                end
+            end
+        end
+    end
+end
 
+
+
+local accessoryRemove = { Enabled = false, Cache = {}, Conns = {} }
+local function removeAccessoriesFromChar(char)
+    if not char then return end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Accessory") or obj:IsA("Hat") then
+            if not accessoryRemove.Cache[obj] then
+                accessoryRemove.Cache[obj] = obj.Parent
+                obj.Parent = nil
+            end
+        end
+    end
+end
+local function restoreAccessories()
+    for obj, parent in pairs(accessoryRemove.Cache) do
+        pcall(function()
+            if obj and obj.Parent == nil and parent and parent.Parent then obj.Parent = parent end
+        end)
+    end
+    table.clear(accessoryRemove.Cache)
+end
+local function startAccessoryRemove()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then removeAccessoriesFromChar(plr.Character) end
+        local c = plr.CharacterAdded:Connect(function(char)
+            task.wait(0.1)
+            if accessoryRemove.Enabled then removeAccessoriesFromChar(char) end
+        end)
+        table.insert(accessoryRemove.Conns, c)
+    end
+    local added = Players.PlayerAdded:Connect(function(plr)
+        local c = plr.CharacterAdded:Connect(function(char)
+            task.wait(0.1)
+            if accessoryRemove.Enabled then removeAccessoriesFromChar(char) end
+        end)
+        table.insert(accessoryRemove.Conns, c)
+    end)
+    table.insert(accessoryRemove.Conns, added)
+end
+local function stopAccessoryRemove()
+    for _, c in ipairs(accessoryRemove.Conns) do pcall(function() c:Disconnect() end) end
+    table.clear(accessoryRemove.Conns)
+    restoreAccessories()
+end
+
+local animRemove = { Enabled = false, Conns = {} }
+local function forceKillTracks(animator)
+    if not animator then return end
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        pcall(function() track:Stop(0); track:AdjustSpeed(0); track:AdjustWeight(0, 0) end)
+    end
+end
+local function zeroMotorTransforms(char)
+    if not char then return end
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("Motor6D") and obj.Name ~= "Root" and obj.Name ~= "RootJoint" then
+            pcall(function() obj.Transform = CFrame.new() end)
+        end
+    end
+end
+local function stopAllAnimsOnChar(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local animator = hum and hum:FindFirstChildOfClass("Animator")
+    forceKillTracks(animator)
+    zeroMotorTransforms(char)
+end
+local function startAnimRemove()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then task.spawn(stopAllAnimsOnChar, plr.Character) end
+        local c = plr.CharacterAdded:Connect(function(char)
+            task.wait(0.2)
+            if animRemove.Enabled then stopAllAnimsOnChar(char) end
+        end)
+        table.insert(animRemove.Conns, c)
+    end
+    local hbConn = RunService.Heartbeat:Connect(function()
+        if not animRemove.Enabled then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local char = plr.Character
+            if not char then continue end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local animator = hum and hum:FindFirstChildOfClass("Animator")
+            forceKillTracks(animator)
+            zeroMotorTransforms(char)
+        end
+    end)
+    table.insert(animRemove.Conns, hbConn)
+    local added = Players.PlayerAdded:Connect(function(plr)
+        local c = plr.CharacterAdded:Connect(function(char)
+            task.wait(0.2)
+            if animRemove.Enabled then stopAllAnimsOnChar(char) end
+        end)
+        table.insert(animRemove.Conns, c)
+    end)
+    table.insert(animRemove.Conns, added)
+end
+local function stopAnimRemove()
+    for _, c in ipairs(animRemove.Conns) do pcall(function() c:Disconnect() end) end
+    table.clear(animRemove.Conns)
+end
 
 -- ═══════════════════════════════════════════════════════════════
 --  TABS
 -- ═══════════════════════════════════════════════════════════════
-local banTab = window:CreateTab({ name="BANEABLE", icon="zap" })
-
-banTab:CreateSection({ name="AUTOSHOT" })
-Feat.AutoShot.handle = banTab:CreateToggle({ name="AutoShot", flag="AutoShot", callback=function(v)
-    autoShoot.Enabled=v; if v and not autoShoot.ShowFOV then Extras.Notify("⚠ AutoShot y Silent Aim no funcionan sin FOV!","WARNING") end
+local banTab = window:CreateTab({ name=T("TabBaneable"), icon="zap" })
+banTab:CreateSection({ name=T("SecAutoshot") })
+Feat.AutoShot.handle = banTab:CreateToggle({ name=T("AutoShot"), flag="AutoShot", callback=function(v)
+    autoShoot.Enabled=v; if v and not autoShoot.ShowFOV then Extras.Notify(T("WarnFov"),"WARNING") end
 end })
-Feat.AutoShotFOV.handle = banTab:CreateToggle({ name="Show Fov", flag="AutoShowFOV", callback=function(v) autoShoot.ShowFOV=v end })
-banTab:CreateToggle({ name="Auto Equip Gun", flag="AutoEquipGunAuto", callback=function(v) autoEquip.Auto=v end })
--- ✅ FIX 1: AutoShot-specific Respetar flags
-banTab:CreateToggle({ name="Respetar Cuchillo Equipado", flag="AutoRespetarCuchillo", callback=function(v)
-    autoEquip.RespetarCuchilloAuto = v
-    if v then Extras.Notify("si tienes el cuchillo en la mano no sacara el arma (AutoShot)", "Respect Knife") end
+Feat.AutoShotFOV.handle = banTab:CreateToggle({ name=T("ShowFov"), flag="AutoShowFOV", callback=function(v) autoShoot.ShowFOV=v end })
+banTab:CreateToggle({ name=T("AutoEquip"), flag="AutoEquipGunAuto", callback=function(v) autoEquip.Auto=v end })
+banTab:CreateToggle({ name=T("RespectKnife"), flag="AutoRespetarCuchillo", callback=function(v)
+	autoEquip.RespetarCuchilloAuto = v
 end })
-banTab:CreateToggle({ name="Respect 2.5 Sec", flag="AutoRespetar25", callback=function(v)
-    autoEquip.Respetar25Auto = v
-    if v then Extras.Notify("autoequip espera 2.5 seg despues de guardar el arma (AutoShot)", "Respect 2.5 Sec") end
+banTab:CreateToggle({ name=T("Respect25"), flag="AutoRespetar25", callback=function(v)
+	autoEquip.Respetar25Auto = v
 end })
-banTab:CreateDropdown({ name="Target", flag="AutoTarget", options={"Head","Torso","Full Body"}, value={"Full Body"},
-    callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; autoShoot.TargetPart=tostring(v) end })
-banTab:CreateInput({ name="Size", flag="AutoFOVSize", value="250", placeholder="250 (max 1000)",
+banTab:CreateDropdown({ name=T("Target"), flag="AutoTarget", options={T("Head"),T("Torso"),T("FullBody")}, value={T("FullBody")},
+    callback=function(opts)
+        local v=type(opts)=="table" and (opts[1] or opts) or opts
+        local map = {[T("Head")]="Head",[T("Torso")]="Torso",[T("FullBody")]="Full Body", Head="Head", Torso="Torso", ["Full Body"]="Full Body", Cabeza="Head", Cuerpo="Full Body"}
+        autoShoot.TargetPart = map[tostring(v)] or "Full Body"
+    end })
+banTab:CreateInput({ name=T("Size"), flag="AutoFOVSize", value="250", placeholder="250 (max 1000)",
     callback=function(text) local n=tonumber(text); if n then autoShoot.FOVSize=math.clamp(n,10,1000) end end })
 
-banTab:CreateSection({ name="SILENT AIM" })
-Feat.SilentAim.handle = banTab:CreateToggle({ name="SilentAim", flag="SilentAim", callback=function(v)
-    silentAim.Enabled=v; if v and not silentAim.ShowFOV then Extras.Notify("⚠ AutoShot y Silent Aim no funcionan sin FOV!","WARNING") end
+banTab:CreateSection({ name=T("SecSilent") })
+Feat.SilentAim.handle = banTab:CreateToggle({ name=T("SilentAim"), flag="SilentAim", callback=function(v)
+    silentAim.Enabled=v; if v and not silentAim.ShowFOV then Extras.Notify(T("WarnFov"),"WARNING") end
 end })
-Feat.SilentFOV.handle = banTab:CreateToggle({ name="Show Fov", flag="SilentShowFOV", callback=function(v) silentAim.ShowFOV=v end })
-banTab:CreateToggle({ name="Auto Equip Gun", flag="AutoEquipGunSilent", callback=function(v) autoEquip.Silent=v end })
--- ✅ FIX 1: SilentAim-specific Respetar flags
-banTab:CreateToggle({ name="Respetar Cuchillo Equipado", flag="SilentRespetarCuchillo", callback=function(v)
-    autoEquip.RespetarCuchilloSilent = v
-    if v then Extras.Notify("si tienes el cuchillo en la mano no sacara el arma (Silent)", "Respect Knife") end
+Feat.SilentFOV.handle = banTab:CreateToggle({ name=T("ShowFov"), flag="SilentShowFOV", callback=function(v) silentAim.ShowFOV=v end })
+banTab:CreateToggle({ name=T("AutoEquip"), flag="AutoEquipGunSilent", callback=function(v) autoEquip.Silent=v end })
+banTab:CreateToggle({ name=T("RespectKnife"), flag="SilentRespetarCuchillo", callback=function(v)
+	autoEquip.RespetarCuchilloSilent = v
 end })
-banTab:CreateToggle({ name="Respect 2.5 Sec", flag="SilentRespetar25", callback=function(v)
-    autoEquip.Respetar25Silent = v
-    if v then Extras.Notify("autoequip espera 2.5 seg despues de guardar el arma (Silent)", "Respect 2.5 Sec") end
+banTab:CreateToggle({ name=T("Respect25"), flag="SilentRespetar25", callback=function(v)
+	autoEquip.Respetar25Silent = v
 end })
-banTab:CreateDropdown({ name="Target", flag="SilentTarget", options={"Head","Torso","Full Body"}, value={"Full Body"},
-    callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; silentAim.TargetPart=tostring(v) end })
-banTab:CreateInput({ name="Size", flag="SilentFOVSize", value="250", placeholder="250 (max 1000)",
+banTab:CreateDropdown({ name=T("Target"), flag="SilentTarget", options={T("Head"),T("Torso"),T("FullBody")}, value={T("FullBody")},
+    callback=function(opts)
+        local v=type(opts)=="table" and (opts[1] or opts) or opts
+        local map = {[T("Head")]="Head",[T("Torso")]="Torso",[T("FullBody")]="Full Body", Head="Head", Torso="Torso", ["Full Body"]="Full Body", Cabeza="Head", Cuerpo="Full Body"}
+        silentAim.TargetPart = map[tostring(v)] or "Full Body"
+    end })
+banTab:CreateInput({ name=T("Size"), flag="SilentFOVSize", value="250", placeholder="250 (max 1000)",
     callback=function(text) local n=tonumber(text); if n then silentAim.FOVSize=math.clamp(n,10,1000) end end })
 
-banTab:CreateSection({ name="HITBOX" })
-Feat.Hitbox.handle = banTab:CreateToggle({ name="Hitbox", flag="HitboxEnable",
-    callback=function(v) hitbox.Enabled=v; if not v then clearHitboxes() end end })
-banTab:CreateInput({ name="Size", flag="HitboxSize", value="5", placeholder="5 (0 - 33)",
-    callback=function(text) local n=tonumber(text); if n then hitbox.Size=math.clamp(n,1,33) end end })
-banTab:CreateDropdown({ name="Transparency", flag="HitboxTrans", options={"0","0.2","0.4","0.6","0.8","1"}, value={"0.6"},
+banTab:CreateSection({ name=T("SecHitbox") })
+Feat.Hitbox.handle = banTab:CreateToggle({ name=T("Hitbox"), flag="HitboxEnable", callback=function(v) hitbox.Enabled=v; if not v then clearHitboxes() end end })
+banTab:CreateInput({ name=T("Size"), flag="HitboxSize", value="5", placeholder="5 (0 - 33)", callback=function(text) local n=tonumber(text); if n then hitbox.Size=math.clamp(n,1,33) end end })
+banTab:CreateDropdown({ name=T("Transparency"), flag="HitboxTrans", options={"0","0.2","0.4","0.6","0.8","1"}, value={"0.6"},
     callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v); if n then hitbox.Transparency=n end end })
 
-local legitTab = window:CreateTab({ name="LEGIT", icon="crosshair" })
+local legitTab = window:CreateTab({ name=T("TabLegit"), icon="crosshair" })
+legitTab:CreateSection({ name=T("SecTrigger") })
+Feat.TriggerBot.handle = legitTab:CreateToggle({ name=T("TriggerBot"), flag="TriggerBot", callback=function(v) TriggerEnabled=v end })
+legitTab:CreateSection({ name=T("SecMacro") })
+Feat.Macro.handle = legitTab:CreateToggle({ name=T("Macro"), flag="Macro", callback=function(v) macroEnabled=v; if not v then table.clear(macroTouch.Active); touchHeld=false end end })
+legitTab:CreateSection({ name=T("SecCamlock") })
+Feat.Camlock.handle = legitTab:CreateToggle({ name=T("CamLock"), flag="CamLock", callback=function(v) camlockEnabled=v; if not v then camlockTarget=nil end end })
+legitTab:CreateToggle({ name=T("GunOnly"), flag="CamLockGunOnly", callback=function(v) camlockGunOnly=v; if v and camlockKnifeOnly then camlockKnifeOnly=false end end })
+legitTab:CreateToggle({ name=T("KnifeOnly"), flag="CamLockKnifeOnly", callback=function(v) camlockKnifeOnly=v; if v and camlockGunOnly then camlockGunOnly=false end end })
+legitTab:CreateSection({ name=T("SecScreen") })
+legitTab:CreateToggle({ name=T("StretchScreen"), flag="StretchScreen", callback=function(v) SetStretched(v) end })
+legitTab:CreateDropdown({ name=T("Size"), flag="StretchFactor", options={"1","1.35","1.60","1.80","2","2.5"}, value={"1.60"},
+    callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v); if n then STRETCH_FACTOR=n; if stretchEnabled then SetStretched(false); SetStretched(true) end end end })
 
-legitTab:CreateSection({ name="TRIGGER" })
-Feat.TriggerBot.handle = legitTab:CreateToggle({ name="TriggerBot", flag="TriggerBot", callback=function(v) TriggerEnabled=v end })
+local espTab = window:CreateTab({ name=T("TabEsp"), icon="eye" })
+espTab:CreateSection({ name=T("SecEnemies") })
+Feat.EspEnemies.handle = espTab:CreateToggle({ name=T("Esp"), flag="EnemyESP", value=true, callback=function(v) espEnemy.Enabled=v end })
+espTab:CreateToggle({ name=T("Names"), flag="EnemyNames", callback=function(v) espEnemy.Names=v end })
+espTab:CreateToggle({ name=T("Line"), flag="EnemyLine", callback=function(v) espEnemy.Line=v end })
+espTab:CreateToggle({ name=T("Studs"), flag="EnemyStuds", callback=function(v) espEnemy.Studs=v end })
+espTab:CreateSection({ name=T("SecAllies") })
+Feat.EspAllies.handle = espTab:CreateToggle({ name=T("Esp"), flag="AllyESP", callback=function(v) espAlly.Enabled=v end })
+espTab:CreateToggle({ name=T("Names"), flag="AllyNames", callback=function(v) espAlly.Names=v end })
+espTab:CreateToggle({ name=T("Line"), flag="AllyLine", callback=function(v) espAlly.Line=v end })
+espTab:CreateToggle({ name=T("Studs"), flag="AllyStuds", callback=function(v) espAlly.Studs=v end })
 
-legitTab:CreateSection({ name="MACRO" })
-Feat.Macro.handle = legitTab:CreateToggle({ name="Macro", flag="Macro",
-    callback=function(v) macroEnabled=v; if not v then table.clear(macroTouch.Active); touchHeld=false end end })
-
-legitTab:CreateSection({ name="CAMLOCK" })
-Feat.Camlock.handle = legitTab:CreateToggle({ name="CamLock", flag="CamLock",
-    callback=function(v) camlockEnabled=v; if not v then camlockTarget=nil end end })
-legitTab:CreateToggle({ name="Gun Only",   flag="CamLockGunOnly",   callback=function(v) camlockGunOnly=v;   if v and camlockKnifeOnly then camlockKnifeOnly=false end end })
-legitTab:CreateToggle({ name="Knife Only", flag="CamLockKnifeOnly", callback=function(v) camlockKnifeOnly=v; if v and camlockGunOnly  then camlockGunOnly=false  end end })
-
-legitTab:CreateSection({ name="PANTALLA" })
-legitTab:CreateToggle({ name="Estirar Pantalla", flag="StretchScreen", callback=function(v) SetStretched(v) end })
-legitTab:CreateDropdown({ name="Size", flag="StretchFactor", options={"1","1.35","1.60","1.80","2","2.5"}, value={"1.60"},
-    callback=function(opts)
-        local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v)
-        if n then STRETCH_FACTOR=n; if stretchEnabled then SetStretched(false); SetStretched(true) end end
-    end })
-
-local espTab = window:CreateTab({ name="ESP", icon="eye" })
-
-espTab:CreateSection({ name="ENEMIGOS" })
-Feat.EspEnemies.handle = espTab:CreateToggle({ name="ESP", flag="EnemyESP", value=true, callback=function(v) espEnemy.Enabled=v end })
-espTab:CreateToggle({ name="Names", flag="EnemyNames", callback=function(v) espEnemy.Names=v end })
-espTab:CreateToggle({ name="Line",  flag="EnemyLine",  callback=function(v) espEnemy.Line=v  end })
-espTab:CreateToggle({ name="Studs", flag="EnemyStuds", callback=function(v) espEnemy.Studs=v end })
-
-espTab:CreateSection({ name="AMIGOS" })
-Feat.EspAllies.handle = espTab:CreateToggle({ name="ESP",   flag="AllyESP",   callback=function(v) espAlly.Enabled=v end })
-espTab:CreateToggle({ name="Names", flag="AllyNames", callback=function(v) espAlly.Names=v end })
-espTab:CreateToggle({ name="Line",  flag="AllyLine",  callback=function(v) espAlly.Line=v  end })
-espTab:CreateToggle({ name="Studs", flag="AllyStuds", callback=function(v) espAlly.Studs=v end })
-
-local extraTab = window:CreateTab({ name="EXTRAS", icon="sparkles" })
-
-extraTab:CreateSection({ name="NAME" })
-extraTab:CreateToggle({ name="Change My Name",  flag="ChangeMyName",  callback=function(v) nameChange.MyName=v;  refreshAllNames() end })
-extraTab:CreateToggle({ name="Change All Name", flag="ChangeAllName", callback=function(v) nameChange.AllNames=v; refreshAllNames() end })
-
-extraTab:CreateSection({ name="KILL" })
-extraTab:CreateToggle({ name="Kill Sound", flag="KillSound", callback=function(v) killSound.Enabled=v; setKillSoundMute(v) end })
-extraTab:CreateDropdown({ name="Sound",  flag="KillSoundSelect", options=killSound.Options, value={"Sata Andagi"},
+local extraTab = window:CreateTab({ name=T("TabExtras"), icon="sparkles" })
+extraTab:CreateSection({ name=T("SecName") })
+extraTab:CreateToggle({ name=T("ChangeMyName"), flag="ChangeMyName", value=true, callback=function(v) nameChange.MyName=v; refreshAllNames() end })
+extraTab:CreateToggle({ name=T("ChangeAllName"), flag="ChangeAllName", callback=function(v) nameChange.AllNames=v; refreshAllNames() end })
+extraTab:CreateSection({ name=T("SecKill") })
+extraTab:CreateToggle({ name=T("KillSound"), flag="KillSound", callback=function(v) killSound.Enabled=v; setKillSoundMute(v) end })
+extraTab:CreateDropdown({ name=T("Sound"), flag="KillSoundSelect", options=killSound.Options, value={"Sata Andagi"},
     callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; if KillSounds[tostring(v)] then killSound.Selected=tostring(v) end end })
-extraTab:CreateDropdown({ name="Volume", flag="KillSoundVolume", options={"0.5","1","1.5","2","2.5","3"}, value={"2.5"},
+extraTab:CreateDropdown({ name=T("Volume"), flag="KillSoundVolume", options={"0.5","1","1.5","2","2.5","3"}, value={"2.5"},
     callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v); if n then killSound.Volume=n end end })
-extraTab:CreateToggle({ name="Solo Yo", flag="KillSoundSoloYo", callback=function(v) killSound.SoloYo=v end })
-
-extraTab:CreateSection({ name="SHOOT" })
-extraTab:CreateToggle({ name="Shoot Sound", flag="ShootSound", callback=function(v) shootSound.Enabled=v; if v then startShootWatchers() end end })
-extraTab:CreateDropdown({ name="Sound",  flag="ShootSoundSelect", options=shootSound.Options, value={"Magia de Anime"},
+extraTab:CreateToggle({ name=T("SoloMe"), flag="KillSoundSoloYo", callback=function(v) killSound.SoloYo=v end })
+extraTab:CreateSection({ name=T("SecShoot") })
+extraTab:CreateToggle({ name=T("ShootSound"), flag="ShootSound", callback=function(v) shootSound.Enabled=v; if v then startShootWatchers() end end })
+extraTab:CreateDropdown({ name=T("Sound"), flag="ShootSoundSelect", options=shootSound.Options, value={"Magia de Anime"},
     callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; if ShootReloadOptions[tostring(v)] then shootSound.Selected=tostring(v) end end })
-extraTab:CreateDropdown({ name="Volume", flag="ShootSoundVolume", options={"0.5","1","1.5","2","2.5","3"}, value={"2.5"},
+extraTab:CreateDropdown({ name=T("Volume"), flag="ShootSoundVolume", options={"0.5","1","1.5","2","2.5","3"}, value={"2.5"},
     callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v); if n then shootSound.Volume=n end end })
-
-extraTab:CreateSection({ name="EFECT" })
-extraTab:CreateToggle({ name="Kill Efect", flag="KillEfect", callback=function(v)
+extraTab:CreateSection({ name=T("SecEffect") })
+extraTab:CreateToggle({ name=T("KillEffect"), flag="KillEfect", callback=function(v)
     KillFX.Enabled=v
     if v and KillFX.Style=="Freeze Kill" and not triggerFreezeKill then triggerFreezeKill=startVisualFreezeEffect()
     elseif not v and freezeKillStop then pcall(freezeKillStop); freezeKillStop=nil; triggerFreezeKill=nil end
 end })
-extraTab:CreateDropdown({ name="Efect", flag="KillEfectStyle", options=FX_NAMES, value={"Frostbite"},
+extraTab:CreateDropdown({ name=T("Effect"), flag="KillEfectStyle", options=FX_NAMES, value={"Frostbite"},
     callback=function(opts)
         local v=type(opts)=="table" and (opts[1] or opts) or opts; KillFX.Style=tostring(v)
         if KillFX.Enabled and KillFX.Style=="Freeze Kill" and not triggerFreezeKill then triggerFreezeKill=startVisualFreezeEffect()
         elseif KillFX.Style~="Freeze Kill" and freezeKillStop then pcall(freezeKillStop); freezeKillStop=nil; triggerFreezeKill=nil end
     end })
-extraTab:CreateToggle({ name="Solo Yo", flag="KillEfectSoloYo", callback=function(v) KillFX.SoloYo=v end })
-
-extraTab:CreateSection({ name="PLAYER" })
-Feat.WalkSpeed.handle = extraTab:CreateToggle({ name="WalkSpeed", flag="WalkSpeedEnable", callback=function(v) Extras.SetWalkEnabled(v) end })
-extraTab:CreateInput({ name="Speed", flag="WalkSpeedValue", value="1", placeholder="1 (0 - 1.5)", callback=function(text) Extras.SetWalkSpeed(text) end })
-Feat.Fly.handle = extraTab:CreateToggle({ name="Fly", flag="FlyEnable", callback=function(v) Extras.SetFlyEnabled(v) end })
-extraTab:CreateInput({ name="Speed", flag="FlySpeedValue", value="40", placeholder="40 (0 - 45)", callback=function(text) Extras.SetFlySpeed(text) end })
-
-extraTab:CreateSection({ name="PERFORMANCE" })
-extraTab:CreateToggle({ name="FPS",  flag="PerfFPS",  value=true, callback=function(v) perfHUD.ShowFPS=v;  if not perfHUD.Gui then rebuildPerfHUD() else applyPerfHUDVisibility() end; if not perfHUD.Conn then rebuildPerfHUD() end end })
-extraTab:CreateToggle({ name="Ping", flag="PerfPing", value=true, callback=function(v) perfHUD.ShowPing=v; if not perfHUD.Gui then rebuildPerfHUD() else applyPerfHUDVisibility() end; if not perfHUD.Conn then rebuildPerfHUD() end end })
-extraTab:CreateDropdown({ name="Size", flag="PerfHUDSize", options={"0.2","0.4","0.6","0.8","1.0","1.2","1.4","1.6","1.8","2.0"}, value={"1.0"},
-    callback=function(opts)
-        local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v)
-        if n then perfHUD.Size=n; if perfHUD.ShowFPS or perfHUD.ShowPing then rebuildPerfHUD() end end
-    end })
-
+extraTab:CreateToggle({ name=T("SoloMe"), flag="KillEfectSoloYo", callback=function(v) KillFX.SoloYo=v end })
+extraTab:CreateSection({ name=T("SecPlayer") })
+Feat.WalkSpeed.handle = extraTab:CreateToggle({ name=T("WalkSpeed"), flag="WalkSpeedEnable", callback=function(v) Extras.SetWalkEnabled(v) end })
+extraTab:CreateInput({ name=T("Speed"), flag="WalkSpeedValue", value="1", placeholder="1 (0 - 1.5)", callback=function(text) Extras.SetWalkSpeed(text) end })
+Feat.Fly.handle = extraTab:CreateToggle({ name=T("Fly"), flag="FlyEnable", callback=function(v) Extras.SetFlyEnabled(v) end })
+extraTab:CreateInput({ name=T("Speed"), flag="FlySpeedValue", value="40", placeholder="40 (0 - 45)", callback=function(text) Extras.SetFlySpeed(text) end })
+extraTab:CreateSection({ name=T("SecPerf") })
+extraTab:CreateToggle({ name=T("Fps"), flag="PerfFPS", value=true, callback=function(v) perfHUD.ShowFPS=v; if not perfHUD.Gui then rebuildPerfHUD() else applyPerfHUDVisibility() end; if not perfHUD.Conn then rebuildPerfHUD() end end })
+extraTab:CreateToggle({ name=T("Ping"), flag="PerfPing", value=true, callback=function(v) perfHUD.ShowPing=v; if not perfHUD.Gui then rebuildPerfHUD() else applyPerfHUDVisibility() end; if not perfHUD.Conn then rebuildPerfHUD() end end })
+extraTab:CreateDropdown({ name=T("Size"), flag="PerfHUDSize", options={"0.2","0.4","0.6","0.8","1.0","1.2","1.4","1.6","1.8","2.0"}, value={"1.0"},
+    callback=function(opts) local v=type(opts)=="table" and (opts[1] or opts) or opts; local n=tonumber(v); if n then perfHUD.Size=n; if perfHUD.ShowFPS or perfHUD.ShowPing then rebuildPerfHUD() end end end })
 local lowGraphicsCache = {}
-extraTab:CreateToggle({ name="FPS Boost", flag="FPSBoost", value=false, callback=function(v)
+extraTab:CreateToggle({ name=T("FpsBoost"), flag="FPSBoost", value=false, callback=function(v)
     if v then
         Lighting.GlobalShadows=false; Lighting.FogEnd=1000000
         for _,obj in ipairs(Workspace:GetDescendants()) do
@@ -8924,205 +9486,426 @@ extraTab:CreateToggle({ name="FPS Boost", flag="FPSBoost", value=false, callback
         end
     end
 end })
-
--- ═══════════════════════════════════════════════════════════════
---  BORRAR ACCESORIOS
--- ═══════════════════════════════════════════════════════════════
-local accessoryRemove = { Enabled = false, Cache = {}, Conns = {} }
-
-local function removeAccessoriesFromChar(char)
-    if not char then return end
-    for _, obj in ipairs(char:GetChildren()) do
-        if obj:IsA("Accessory") or obj:IsA("Hat") then
-            if not accessoryRemove.Cache[obj] then
-                accessoryRemove.Cache[obj] = obj.Parent
-                obj.Parent = nil
-            end
-        end
-    end
-end
-
-local function restoreAccessories()
-    for obj, parent in pairs(accessoryRemove.Cache) do
-        pcall(function()
-            if obj and obj.Parent == nil and parent and parent.Parent then
-                obj.Parent = parent
-            end
-        end)
-    end
-    table.clear(accessoryRemove.Cache)
-end
-
-local function startAccessoryRemove()
-    -- remove from all current chars
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character then removeAccessoriesFromChar(plr.Character) end
-        local c = plr.CharacterAdded:Connect(function(char)
-            task.wait(0.1)
-            if accessoryRemove.Enabled then removeAccessoriesFromChar(char) end
-        end)
-        table.insert(accessoryRemove.Conns, c)
-    end
-    local added = Players.PlayerAdded:Connect(function(plr)
-        local c = plr.CharacterAdded:Connect(function(char)
-            task.wait(0.1)
-            if accessoryRemove.Enabled then removeAccessoriesFromChar(char) end
-        end)
-        table.insert(accessoryRemove.Conns, c)
-    end)
-    table.insert(accessoryRemove.Conns, added)
-end
-
-local function stopAccessoryRemove()
-    for _, c in ipairs(accessoryRemove.Conns) do pcall(function() c:Disconnect() end) end
-    table.clear(accessoryRemove.Conns)
-    restoreAccessories()
-end
-
-extraTab:CreateSection({ name="ACCESORIOS" })
-extraTab:CreateToggle({ name="Borrar Accesorios", flag="BorrarAccesorios", value=false, callback=function(v)
-    accessoryRemove.Enabled = v
-    if v then startAccessoryRemove() else stopAccessoryRemove() end
+extraTab:CreateSection({ name=T("SecAccessories") })
+extraTab:CreateToggle({ name=T("RemoveAccessories"), flag="BorrarAccesorios", value=false, callback=function(v)
+    accessoryRemove.Enabled = v; if v then startAccessoryRemove() else stopAccessoryRemove() end
 end })
-
--- ═══════════════════════════════════════════════════════════════
---  QUITAR ANIMACIONES
--- ═══════════════════════════════════════════════════════════════
-local animRemove = { Enabled = false, Conns = {}, Stopped = setmetatable({},{__mode="k"}) }
-
-local function stopAllAnimsOnChar(char)
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local animator = hum and hum:FindFirstChildOfClass("Animator")
-    if not animator then return end
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-        if not animRemove.Stopped[track] then
-            pcall(function() track:Stop(0) end)
-            animRemove.Stopped[track] = true
-        end
-    end
-    -- also zero walk/move speed contribution from default animations
-    pcall(function() hum.WalkSpeed = hum.WalkSpeed end) -- force humanoid re-eval
-end
-
-local function startAnimRemove()
-    -- stop anims on all existing chars
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character then
-            task.spawn(stopAllAnimsOnChar, plr.Character)
-        end
-        local c = plr.CharacterAdded:Connect(function(char)
-            task.wait(0.3)
-            if animRemove.Enabled then stopAllAnimsOnChar(char) end
-        end)
-        table.insert(animRemove.Conns, c)
-    end
-    -- heartbeat to continuously kill any new tracks that start
-    local hbConn = RunService.Heartbeat:Connect(function()
-        if not animRemove.Enabled then return end
-        for _, plr in ipairs(Players:GetPlayers()) do
-            local char = plr.Character
-            if not char then continue end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            local animator = hum and hum:FindFirstChildOfClass("Animator")
-            if not animator then continue end
-            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                if not animRemove.Stopped[track] then
-                    pcall(function() track:Stop(0) end)
-                    animRemove.Stopped[track] = true
-                end
-            end
-        end
-    end)
-    table.insert(animRemove.Conns, hbConn)
-    local added = Players.PlayerAdded:Connect(function(plr)
-        local c = plr.CharacterAdded:Connect(function(char)
-            task.wait(0.3)
-            if animRemove.Enabled then stopAllAnimsOnChar(char) end
-        end)
-        table.insert(animRemove.Conns, c)
-    end)
-    table.insert(animRemove.Conns, added)
-end
-
-local function stopAnimRemove()
-    for _, c in ipairs(animRemove.Conns) do pcall(function() c:Disconnect() end) end
-    table.clear(animRemove.Conns)
-    table.clear(animRemove.Stopped)
-end
-
-extraTab:CreateToggle({ name="Quitar Animaciones", flag="QuitarAnimaciones", value=false, callback=function(v)
-    animRemove.Enabled = v
-    if v then startAnimRemove() else stopAnimRemove() end
+extraTab:CreateToggle({ name=T("RemoveAnimations"), flag="QuitarAnimaciones", value=false, callback=function(v)
+    animRemove.Enabled = v; if v then startAnimRemove() else stopAnimRemove() end
 end })
-
-extraTab:CreateSection({ name="SKY" })
+extraTab:CreateSection({ name=T("SecSky") })
 local skyNames={"Original"}
 for n in pairs(skybox.Data) do table.insert(skyNames, n) end
 table.sort(skyNames, function(a,b) if a=="Original" then return true end; if b=="Original" then return false end; return a<b end)
 local skyboxEnabled=true
-extraTab:CreateToggle({ name="Skybox", flag="SkyboxEnable", value=true, callback=function(v) skyboxEnabled=v; if v then applySkybox(skybox.Current) else restoreSky() end end })
-extraTab:CreateDropdown({ name="Sky", flag="SkyboxSelect", options=skyNames, value={"Sakura Pink Sky"},
+extraTab:CreateToggle({ name=T("Skybox"), flag="SkyboxEnable", value=true, callback=function(v) skyboxEnabled=v; if v then applySkybox(skybox.Current) else restoreSky() end end })
+extraTab:CreateDropdown({ name=T("Sky"), flag="SkyboxSelect", options=skyNames, value={"Space Wave 2"},
     callback=function(opts)
         local v=type(opts)=="table" and (opts[1] or opts) or opts; skybox.Current=tostring(v)
         if skyboxEnabled then applySkybox(skybox.Current) end
     end })
 task.defer(function() applySkybox(skybox.Current) end)
 
-task.defer(rebuildPerfHUD)
-
--- ═══════════════════════════════════════════════════════════════
---  DELETE HUB SECTION  ✅ FIX 3: at the bottom of Extras tab
--- ═══════════════════════════════════════════════════════════════
-extraTab:CreateSection({ name="DELETE HUB" })
-
--- Opcion 1: Unload Hub manual — desactiva todo y destruye el menu
-extraTab:CreateButton({ name="Unload Hub", callback=function()
-    Extras.Notify("Desactivando todo... adios boss man", "Unload Hub")
-    task.delay(0.8, function()
-        pcall(UnloadHub)
-    end)
+extraTab:CreateSection({ name=T("SecMenu") })
+local langLabel = (LANG == "es") and "Español" or "English"
+extraTab:CreateDropdown({ name=T("Language"), flag="MenuLanguage", options={"English","Español"}, value={langLabel},
+    callback=function(opts)
+        local v=type(opts)=="table" and (opts[1] or opts) or opts
+        v = tostring(v)
+        if v == "Español" or v == "es" or v == "Spanish" then pendingLang = "es" else pendingLang = "en" end
+    end })
+extraTab:CreateButton({ name=T("Apply"), callback=function()
+    applyLanguage(pendingLang)
+    Extras.Notify(T("NotifyLang"), "Xitado Hub")
 end })
 
--- ═══════════════════════════════════════════════════════════════
---  KEYBINDS TAB
--- ═══════════════════════════════════════════════════════════════
-local keybindTab = window:CreateTab({ name="KEYBINDS", icon="keyboard" })
+task.defer(rebuildPerfHUD)
 
-keybindTab:CreateSection({ name="BANEABLE" })
-keybindTab:CreateKeybind({ name="AutoShot",  flag="KeyAutoShot",  callback=function() Feat.Toggle("AutoShot")  end })
-keybindTab:CreateKeybind({ name="SilentAim", flag="KeySilentAim", callback=function() Feat.Toggle("SilentAim") end })
-keybindTab:CreateKeybind({ name="Hitbox",    flag="KeyHitbox",    callback=function() Feat.Toggle("Hitbox")    end })
+local keybindTab = window:CreateTab({ name=T("TabKeybinds"), icon="keyboard" })
+keybindTab:CreateSection({ name=T("SecKeyBaneable") })
+keybindTab:CreateKeybind({ name=T("AutoShot"), flag="KeyAutoShot", callback=function() Feat.Toggle("AutoShot") end })
+keybindTab:CreateKeybind({ name=T("SilentAim"), flag="KeySilentAim", callback=function() Feat.Toggle("SilentAim") end })
+keybindTab:CreateKeybind({ name=T("Hitbox"), flag="KeyHitbox", callback=function() Feat.Toggle("Hitbox") end })
+keybindTab:CreateSection({ name=T("SecKeyLegit") })
+keybindTab:CreateKeybind({ name=T("TriggerBot"), flag="KeyTriggerBot", callback=function() Feat.Toggle("TriggerBot") end })
+keybindTab:CreateKeybind({ name=T("Macro"), flag="KeyMacro", callback=function() Feat.Toggle("Macro") end })
+keybindTab:CreateKeybind({ name=T("CamLock"), flag="KeyCamlock", callback=function() Feat.Toggle("Camlock") end })
+keybindTab:CreateSection({ name=T("SecKeyEsp") })
+keybindTab:CreateKeybind({ name=T("SecAllies"), flag="KeyEspAllies", callback=function() Feat.Toggle("EspAllies") end })
+keybindTab:CreateKeybind({ name=T("SecEnemies"), flag="KeyEspEnemies", callback=function() Feat.Toggle("EspEnemies") end })
+keybindTab:CreateSection({ name=T("SecKeyExtras") })
+keybindTab:CreateKeybind({ name=T("WalkSpeed"), flag="KeyWalkSpeed", callback=function() Feat.Toggle("WalkSpeed") end })
+keybindTab:CreateKeybind({ name=T("Fly"), flag="KeyFly", callback=function() Feat.Toggle("Fly") end })
+keybindTab:CreateKeybind({ name=T("Bajar"), flag="KeyBajar", callback=function() Feat.Toggle("Bajar") end })
 
-keybindTab:CreateSection({ name="LEGIT" })
-keybindTab:CreateKeybind({ name="TriggerBot", flag="KeyTriggerBot", callback=function() Feat.Toggle("TriggerBot") end })
-keybindTab:CreateKeybind({ name="Macro",      flag="KeyMacro",      callback=function() Feat.Toggle("Macro")      end })
-keybindTab:CreateKeybind({ name="Camlock",    flag="KeyCamlock",    callback=function() Feat.Toggle("Camlock")    end })
-
-keybindTab:CreateSection({ name="ESP" })
-keybindTab:CreateKeybind({ name="Esp Amigos",   flag="KeyEspAllies",  callback=function() Feat.Toggle("EspAllies")  end })
-keybindTab:CreateKeybind({ name="Esp Enemigos", flag="KeyEspEnemies", callback=function() Feat.Toggle("EspEnemies") end })
-
-keybindTab:CreateSection({ name="EXTRAS" })
-keybindTab:CreateKeybind({ name="WalkSpeed",   flag="KeyWalkSpeed", callback=function() Feat.Toggle("WalkSpeed") end })
-keybindTab:CreateKeybind({ name="Fly",         flag="KeyFly",       callback=function() Feat.Toggle("Fly")       end })
-keybindTab:CreateKeybind({ name="Bajar/Subir", flag="KeyBajar",     callback=function() Feat.Toggle("Bajar")     end })
-
-
-local botonesTab = window:CreateTab({ name="BOTONES", icon="mouse-pointer-click" })
-
-botonesTab:CreateToggle({ name="AutoShot",      flag="BtnAutoShot",  callback=function(v) Extras.SetButtonVisible("AutoShot",  v) end })
-botonesTab:CreateToggle({ name="SilentAim",     flag="BtnSilentAim", callback=function(v) Extras.SetButtonVisible("SilentAim", v) end })
-botonesTab:CreateToggle({ name="Knife Aura",    flag="BtnKnifeAura", callback=function(v) Extras.SetButtonVisible("KnifeAura", v) end })
-botonesTab:CreateToggle({ name="Invisibilidad", flag="BtnInvisible", callback=function(v) Extras.SetButtonVisible("Invisible", v) end })
-botonesTab:CreateToggle({ name="Camlock",       flag="BtnCamlock",   callback=function(v) Extras.SetButtonVisible("Camlock",   v) end })
-botonesTab:CreateToggle({ name="Fly",           flag="BtnFly",       callback=function(v) Extras.SetButtonVisible("Fly",       v) end })
-botonesTab:CreateToggle({ name="Bajar/Subir",   flag="BtnBajar",     callback=function(v) Extras.SetButtonVisible("Bajar",     v) end })
-
+local botonesTab = window:CreateTab({ name=T("TabButtons"), icon="mouse-pointer-click" })
+botonesTab:CreateSection({ name=T("SecButtons") })
+botonesTab:CreateToggle({ name=T("LockPosition"), flag="BtnLockPosition", callback=function(v) Extras.SetButtonsLocked(v) end })
+botonesTab:CreateToggle({ name=T("BtnAutoShot"), flag="BtnAutoShot", callback=function(v) Extras.SetButtonVisible("AutoShot", v) end })
+botonesTab:CreateToggle({ name=T("BtnSilent"), flag="BtnSilentAim", callback=function(v) Extras.SetButtonVisible("SilentAim", v) end })
+botonesTab:CreateToggle({ name=T("BtnAura"), flag="BtnKnifeAura", callback=function(v) Extras.SetButtonVisible("KnifeAura", v) end })
+botonesTab:CreateToggle({ name=T("BtnInv"), flag="BtnInvisible", callback=function(v) Extras.SetButtonVisible("Invisible", v) end })
+botonesTab:CreateToggle({ name=T("BtnCam"), flag="BtnCamlock", callback=function(v) Extras.SetButtonVisible("Camlock", v) end })
+botonesTab:CreateToggle({ name=T("BtnFly"), flag="BtnFly", callback=function(v) Extras.SetButtonVisible("Fly", v) end })
+botonesTab:CreateToggle({ name=T("BtnBajar"), flag="BtnBajar", callback=function(v) Extras.SetButtonVisible("Bajar", v) end })
 
 -- ═══════════════════════════════════════════════════════════════
---  ON DESTROY
+--  ANIMACIONES
 -- ═══════════════════════════════════════════════════════════════
-window:OnDestroy(function()
-    if not destroyed then UnloadHub() end
+local AnimState = {
+	Selected = nil,
+	SelectedName = nil,
+	Switching = false,
+	Original = nil,
+	Toggles = {},
+}
+
+local AnimPacks = {
+	{ Name = "Astronaut", Ids = { idle1="http://www.roblox.com/asset/?id=891621366",idle2="http://www.roblox.com/asset/?id=891633237",walk="http://www.roblox.com/asset/?id=891667138",run="http://www.roblox.com/asset/?id=891636393",jump="http://www.roblox.com/asset/?id=891627522",fall="http://www.roblox.com/asset/?id=891617961" }},
+	{ Name = "Bubbly", Ids = { idle1="http://www.roblox.com/asset/?id=910004836",idle2="http://www.roblox.com/asset/?id=910009958",walk="http://www.roblox.com/asset/?id=910034870",run="http://www.roblox.com/asset/?id=910025107",jump="http://www.roblox.com/asset/?id=910016857",fall="http://www.roblox.com/asset/?id=910001910" }},
+	{ Name = "Cartoony", Ids = { idle1="http://www.roblox.com/asset/?id=742637544",idle2="http://www.roblox.com/asset/?id=742638445",walk="http://www.roblox.com/asset/?id=742640026",run="http://www.roblox.com/asset/?id=742638842",jump="http://www.roblox.com/asset/?id=742637942",fall="http://www.roblox.com/asset/?id=742637151" }},
+	{ Name = "Elder", Ids = { idle1="http://www.roblox.com/asset/?id=845397899",idle2="http://www.roblox.com/asset/?id=845400520",walk="http://www.roblox.com/asset/?id=845403856",run="http://www.roblox.com/asset/?id=845386501",jump="http://www.roblox.com/asset/?id=845398858",fall="http://www.roblox.com/asset/?id=845396048" }},
+	{ Name = "Knight", Ids = { idle1="http://www.roblox.com/asset/?id=657595757",idle2="http://www.roblox.com/asset/?id=657568135",walk="http://www.roblox.com/asset/?id=657552124",run="http://www.roblox.com/asset/?id=657564596",jump="http://www.roblox.com/asset/?id=658409194",fall="http://www.roblox.com/asset/?id=657600338" }},
+	{ Name = "Levitation", Ids = { idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616013216",run="http://www.roblox.com/asset/?id=616010382",jump="http://www.roblox.com/asset/?id=616008936",fall="http://www.roblox.com/asset/?id=616005863" }},
+	{ Name = "Mage", Ids = { idle1="http://www.roblox.com/asset/?id=707742142",idle2="http://www.roblox.com/asset/?id=707855907",walk="http://www.roblox.com/asset/?id=707897309",run="http://www.roblox.com/asset/?id=707861613",jump="http://www.roblox.com/asset/?id=707853694",fall="http://www.roblox.com/asset/?id=707829716" }},
+	{ Name = "Ninja", Ids = { idle1="http://www.roblox.com/asset/?id=656117400",idle2="http://www.roblox.com/asset/?id=656118341",walk="http://www.roblox.com/asset/?id=656121766",run="http://www.roblox.com/asset/?id=656118852",jump="http://www.roblox.com/asset/?id=656117878",fall="http://www.roblox.com/asset/?id=656115606" }},
+	{ Name = "Pirate", Ids = { idle1="http://www.roblox.com/asset/?id=750781874",idle2="http://www.roblox.com/asset/?id=750782770",walk="http://www.roblox.com/asset/?id=750785693",run="http://www.roblox.com/asset/?id=750783738",jump="http://www.roblox.com/asset/?id=750782230",fall="http://www.roblox.com/asset/?id=750780242" }},
+	{ Name = "Robot", Ids = { idle1="http://www.roblox.com/asset/?id=616088211",idle2="http://www.roblox.com/asset/?id=616089559",walk="http://www.roblox.com/asset/?id=616095330",run="http://www.roblox.com/asset/?id=616091570",jump="http://www.roblox.com/asset/?id=616090535",fall="http://www.roblox.com/asset/?id=616087089" }},
+	{ Name = "Stylish", Ids = { idle1="http://www.roblox.com/asset/?id=616136790",idle2="http://www.roblox.com/asset/?id=616138447",walk="http://www.roblox.com/asset/?id=616146177",run="http://www.roblox.com/asset/?id=616140816",jump="http://www.roblox.com/asset/?id=616139451",fall="http://www.roblox.com/asset/?id=616134815" }},
+	{ Name = "SuperHero", Ids = { idle1="http://www.roblox.com/asset/?id=616111295",idle2="http://www.roblox.com/asset/?id=616113536",walk="http://www.roblox.com/asset/?id=616122287",run="http://www.roblox.com/asset/?id=616117076",jump="http://www.roblox.com/asset/?id=616115533",fall="http://www.roblox.com/asset/?id=616108001" }},
+	{ Name = "Toy", Ids = { idle1="http://www.roblox.com/asset/?id=782841498",idle2="http://www.roblox.com/asset/?id=782845736",walk="http://www.roblox.com/asset/?id=782843345",run="http://www.roblox.com/asset/?id=782842708",jump="http://www.roblox.com/asset/?id=782847020",fall="http://www.roblox.com/asset/?id=782846423" }},
+	{ Name = "Vampire", Ids = { idle1="http://www.roblox.com/asset/?id=1083445855",idle2="http://www.roblox.com/asset/?id=1083450166",walk="http://www.roblox.com/asset/?id=1083473930",run="http://www.roblox.com/asset/?id=1083462077",jump="http://www.roblox.com/asset/?id=1083455352",fall="http://www.roblox.com/asset/?id=1083443587" }},
+	{ Name = "Werewolf", Ids = { idle1="http://www.roblox.com/asset/?id=1083195517",idle2="http://www.roblox.com/asset/?id=1083214717",walk="http://www.roblox.com/asset/?id=1083178339",run="http://www.roblox.com/asset/?id=1083216690",jump="http://www.roblox.com/asset/?id=1083218792",fall="http://www.roblox.com/asset/?id=1083189019" }},
+	{ Name = "Zombie", Ids = { idle1="http://www.roblox.com/asset/?id=616158929",idle2="http://www.roblox.com/asset/?id=616160636",walk="http://www.roblox.com/asset/?id=616168032",run="http://www.roblox.com/asset/?id=616163682",jump="http://www.roblox.com/asset/?id=616161997",fall="http://www.roblox.com/asset/?id=616157476" }},
+	{ Name = "Patrol", Ids = { idle1="http://www.roblox.com/asset/?id=1149612882",idle2="http://www.roblox.com/asset/?id=1150842221",walk="http://www.roblox.com/asset/?id=1151231493",run="http://www.roblox.com/asset/?id=1150967949",jump="http://www.roblox.com/asset/?id=1148811837",fall="http://www.roblox.com/asset/?id=1148863382" }},
+	{ Name = "Confident", Ids = { idle1="http://www.roblox.com/asset/?id=1069977950",idle2="http://www.roblox.com/asset/?id=1069987858",walk="http://www.roblox.com/asset/?id=1070017263",run="http://www.roblox.com/asset/?id=1070001516",jump="http://www.roblox.com/asset/?id=1069984524",fall="http://www.roblox.com/asset/?id=1069973677" }},
+	{ Name = "Popstar", Ids = { idle1="http://www.roblox.com/asset/?id=1212900985",idle2="http://www.roblox.com/asset/?id=1150842221",walk="http://www.roblox.com/asset/?id=1212980338",run="http://www.roblox.com/asset/?id=1212980348",jump="http://www.roblox.com/asset/?id=1212954642",fall="http://www.roblox.com/asset/?id=1212900995" }},
+	{ Name = "Cowboy", Ids = { idle1="http://www.roblox.com/asset/?id=1014390418",idle2="http://www.roblox.com/asset/?id=1014398616",walk="http://www.roblox.com/asset/?id=1014421541",run="http://www.roblox.com/asset/?id=1014401683",jump="http://www.roblox.com/asset/?id=1014394726",fall="http://www.roblox.com/asset/?id=1014384571" }},
+	{ Name = "Ghost", Ids = { idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616013216",run="http://www.roblox.com/asset/?id=616013216",jump="http://www.roblox.com/asset/?id=616008936",fall="http://www.roblox.com/asset/?id=616005863" }},
+	{ Name = "Sneaky", Ids = { idle1="http://www.roblox.com/asset/?id=1132473842",idle2="http://www.roblox.com/asset/?id=1132477671",walk="http://www.roblox.com/asset/?id=1132510133",run="http://www.roblox.com/asset/?id=1132494274",jump="http://www.roblox.com/asset/?id=1132489853",fall="http://www.roblox.com/asset/?id=1132469004" }},
+	{ Name = "Princess", Ids = { idle1="http://www.roblox.com/asset/?id=941003647",idle2="http://www.roblox.com/asset/?id=941013098",walk="http://www.roblox.com/asset/?id=941028902",run="http://www.roblox.com/asset/?id=941015281",jump="http://www.roblox.com/asset/?id=941008832",fall="http://www.roblox.com/asset/?id=941000007" }},
+	{ Name = "Default", Ids = { idle1="http://www.roblox.com/asset/?id=2510196951",idle2="http://www.roblox.com/asset/?id=2510197257",walk="http://www.roblox.com/asset/?id=2510202577",run="http://www.roblox.com/asset/?id=2510198475",jump="http://www.roblox.com/asset/?id=2510197830",fall="http://www.roblox.com/asset/?id=2510195892" }},
+}
+
+local function captureOriginalAnims(char)
+	if AnimState.Original then return end
+	local Animate = char and char:FindFirstChild("Animate")
+	if not Animate then return end
+	local function getId(parentName, childName)
+		local parentObj = Animate:FindFirstChild(parentName)
+		local animObj = parentObj and parentObj:FindFirstChild(childName)
+		if animObj and animObj:IsA("Animation") then return animObj.AnimationId end
+		return nil
+	end
+	AnimState.Original = {
+		idle1 = getId("idle", "Animation1"),
+		idle2 = getId("idle", "Animation2"),
+		walk = getId("walk", "WalkAnim"),
+		run = getId("run", "RunAnim"),
+		jump = getId("jump", "JumpAnim"),
+		fall = getId("fall", "FallAnim"),
+	}
+end
+
+local function ApplyAnims(ids)
+	local char = player.Character
+	if not char or not ids then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local Animate = char:FindFirstChild("Animate")
+	if not Animate or not hum then return end
+	captureOriginalAnims(char)
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			pcall(function() track:Stop(0) end)
+		end
+	end
+	local function setAnimId(parentName, childName, newId)
+		local parentObj = Animate:FindFirstChild(parentName)
+		if parentObj then
+			local animObj = parentObj:FindFirstChild(childName)
+			if animObj and animObj:IsA("Animation") then
+				animObj.AnimationId = newId or "rbxassetid://0"
+			end
+		end
+	end
+	setAnimId("idle", "Animation1", ids.idle1)
+	setAnimId("idle", "Animation2", ids.idle2)
+	setAnimId("walk", "WalkAnim", ids.walk)
+	setAnimId("run", "RunAnim", ids.run)
+	setAnimId("jump", "JumpAnim", ids.jump)
+	setAnimId("fall", "FallAnim", ids.fall)
+	Animate.Enabled = false
+	task.wait(0.03)
+	Animate.Enabled = true
+	if hum.Health > 0 then
+		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
+	end
+end
+
+local function RestoreOriginalAnims()
+	if not AnimState.Original then return end
+	ApplyAnims(AnimState.Original)
+end
+
+local animTab = window:CreateTab({ name=T("TabAnims"), icon="person-standing" })
+animTab:CreateSection({ name=T("SecAnimList") })
+
+for _, pack in ipairs(AnimPacks) do
+	local handle
+	handle = animTab:CreateToggle({
+		name = pack.Name,
+		flag = "AnimPack_" .. pack.Name,
+		value = false,
+		callback = function(enabled)
+			if AnimState.Switching then return end
+			if enabled then
+				AnimState.Switching = true
+				for otherName, otherHandle in pairs(AnimState.Toggles) do
+					if otherName ~= pack.Name then
+						pcall(function() otherHandle:Set(false) end)
+					end
+				end
+				AnimState.Switching = false
+				AnimState.Selected = pack.Ids
+				AnimState.SelectedName = pack.Name
+				task.spawn(function() ApplyAnims(pack.Ids) end)
+			else
+				if AnimState.SelectedName == pack.Name then
+					AnimState.Selected = nil
+					AnimState.SelectedName = nil
+					task.spawn(RestoreOriginalAnims)
+				end
+			end
+		end,
+	})
+	AnimState.Toggles[pack.Name] = handle
+end
+
+player.CharacterAdded:Connect(function(char)
+	local animate = char:WaitForChild("Animate", 5)
+	if animate and AnimState.Selected then
+		task.wait(0.25)
+		ApplyAnims(AnimState.Selected)
+	else
+		AnimState.Original = nil
+	end
 end)
+
+
+-- ═══════════════════════════════════════════════════════════════
+--  SKINCHANGER
+-- ═══════════════════════════════════════════════════════════════
+local SkinState = {
+	UserId = nil,
+	Username = nil,
+	Rig = "R15",
+	Applied = false,
+	Busy = false,
+	OriginalDesc = nil,
+	Switching = false,
+}
+
+local function skinResolveUser(textIn)
+	textIn = tostring(textIn or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	if textIn == "" then return nil, nil end
+	local asNum = tonumber(textIn)
+	if asNum then
+		local name = nil
+		pcall(function() name = Players:GetNameFromUserIdAsync(asNum) end)
+		return asNum, name or tostring(asNum)
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Name:lower() == textIn:lower() or plr.DisplayName:lower() == textIn:lower() then
+			return plr.UserId, plr.Name
+		end
+	end
+	local uid = nil
+	local ok = pcall(function() uid = Players:GetUserIdFromNameAsync(textIn) end)
+	if ok and uid then return uid, textIn end
+	return nil, nil
+end
+
+local function skinGetChar()
+	local char = player.Character
+	if not char then return nil end
+	return char
+end
+
+local function skinCaptureOriginal(char)
+	if SkinState.OriginalDesc then return end
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	pcall(function()
+		SkinState.OriginalDesc = hum:GetAppliedDescription()
+	end)
+	if not SkinState.OriginalDesc then
+		pcall(function()
+			SkinState.OriginalDesc = Players:GetHumanoidDescriptionFromUserId(player.UserId)
+		end)
+	end
+end
+
+local function skinApplyToChar(char, userId, rig)
+	if not char or not userId then return false end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return false end
+	skinCaptureOriginal(char)
+	local desc = nil
+	pcall(function()
+		desc = Players:GetHumanoidDescriptionFromUserId(userId)
+	end)
+	if not desc then return false end
+	-- Prefer ApplyDescription on local humanoid (works client-side in most exploit contexts)
+	local ok = pcall(function()
+		hum:ApplyDescription(desc)
+	end)
+	if not ok then
+		-- fallback: build model and copy accessories/body colors roughly via description again
+		ok = pcall(function()
+			local model
+			if rig == "R6" then
+				model = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+			else
+				model = Players:CreateHumanoidModelFromUserId(userId)
+			end
+			if model then
+				local mh = model:FindFirstChildOfClass("Humanoid")
+				if mh then
+					local md = mh:GetAppliedDescription()
+					if md then hum:ApplyDescription(md) end
+				end
+				model:Destroy()
+			end
+		end)
+	end
+	return ok
+end
+
+local function skinRemoveFromChar(char)
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	if SkinState.OriginalDesc then
+		pcall(function() hum:ApplyDescription(SkinState.OriginalDesc) end)
+	else
+		pcall(function()
+			local d = Players:GetHumanoidDescriptionFromUserId(player.UserId)
+			if d then hum:ApplyDescription(d) end
+		end)
+	end
+end
+
+local function SkinApply(usernameText)
+	if SkinState.Busy then return end
+	SkinState.Busy = true
+	task.spawn(function()
+		local uid, name = skinResolveUser(usernameText)
+		if not uid then
+			Extras.Notify(T("SkinNotFound"), T("TabSkin"))
+			SkinState.Busy = false
+			return
+		end
+		SkinState.UserId = uid
+		SkinState.Username = name
+		local char = skinGetChar()
+		if not char then
+			Extras.Notify(T("SkinWaitChar"), T("TabSkin"))
+			SkinState.Busy = false
+			return
+		end
+		local ok = skinApplyToChar(char, uid, SkinState.Rig)
+		SkinState.Applied = ok and true or false
+		if ok then
+			Extras.Notify((name or tostring(uid)) .. " · " .. SkinState.Rig, T("SkinApplied"))
+		else
+			Extras.Notify(T("SkinNotFound"), T("TabSkin"))
+		end
+		SkinState.Busy = false
+	end)
+end
+
+local function SkinRemove()
+	if SkinState.Busy then return end
+	SkinState.Busy = true
+	task.spawn(function()
+		local char = skinGetChar()
+		skinRemoveFromChar(char)
+		SkinState.Applied = false
+		Extras.Notify(T("SkinRemoved"), T("TabSkin"))
+		SkinState.Busy = false
+	end)
+end
+
+player.CharacterAdded:Connect(function(char)
+	if not SkinState.Applied or not SkinState.UserId then return end
+	task.spawn(function()
+		char:WaitForChild("Humanoid", 10)
+		task.wait(0.5)
+		if SkinState.Applied and SkinState.UserId and player.Character == char then
+			skinApplyToChar(char, SkinState.UserId, SkinState.Rig)
+		end
+	end)
+end)
+
+local skinTab = window:CreateTab({ name=T("TabSkin"), icon="shirt" })
+local skinUserInput = ""
+skinTab:CreateInput({
+	name = T("SkinPlaceholder"),
+	flag = "SkinUser",
+	placeholder = T("SkinPlaceholder"),
+	callback = function(txt)
+		skinUserInput = tostring(txt or "")
+	end,
+})
+skinTab:CreateButton({
+	name = T("SkinApply"),
+	callback = function()
+		SkinApply(skinUserInput)
+	end,
+})
+skinTab:CreateButton({
+	name = T("SkinRemove"),
+	callback = function()
+		SkinRemove()
+	end,
+})
+skinTab:CreateSection({ name=T("SecSkinTipo") })
+local skinR15, skinR6
+skinR15 = skinTab:CreateToggle({
+	name = T("SkinR15"),
+	flag = "SkinR15",
+	value = true,
+	callback = function(v)
+		if SkinState.Switching then return end
+		if v then
+			SkinState.Switching = true
+			SkinState.Rig = "R15"
+			if skinR6 then pcall(function() skinR6:Set(false) end) end
+			SkinState.Switching = false
+			if SkinState.Applied and SkinState.UserId then
+				SkinApply(SkinState.Username or tostring(SkinState.UserId))
+			end
+		end
+	end,
+})
+skinR6 = skinTab:CreateToggle({
+	name = T("SkinR6"),
+	flag = "SkinR6",
+	value = false,
+	callback = function(v)
+		if SkinState.Switching then return end
+		if v then
+			SkinState.Switching = true
+			SkinState.Rig = "R6"
+			if skinR15 then pcall(function() skinR15:Set(false) end) end
+			SkinState.Switching = false
+			if SkinState.Applied and SkinState.UserId then
+				SkinApply(SkinState.Username or tostring(SkinState.UserId))
+			end
+		end
+	end,
+})
+
+
+-- Rayfield gen2 has no OnDestroy on this build; cleanup is manual via onHubDestroy if needed.
