@@ -524,6 +524,8 @@ function silentHook.Pick()
     return part, pos
 end
 
+local autoForceAim = { active = false, pos = nil, untilT = 0 }
+
 local function installMouseHook()
     if not (GRMT and SRO) then return false end
     local ok = pcall(function()
@@ -533,9 +535,29 @@ local function installMouseHook()
         SRO(mt, false)
         mt.__index = function(self, key)
             if CC and CC() then return oldIndex(self, key) end
-            if self == mouse and key == "Hit" then
-                local p, pos = silentHook.Pick()
-                if p then return CFrame.new(pos) end
+            if self == mouse then
+                local forcePos = nil
+                if autoForceAim.active and autoForceAim.pos and os.clock() <= (autoForceAim.untilT or 0) then
+                    forcePos = autoForceAim.pos
+                elseif autoForceAim.active then
+                    autoForceAim.active = false
+                end
+                if not forcePos then
+                    local p, pos = silentHook.Pick()
+                    if p then forcePos = pos end
+                end
+                if forcePos then
+                    if key == "Hit" then
+                        return CFrame.new(forcePos)
+                    elseif key == "UnitRay" then
+                        local origin = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position or forcePos
+                        local dir = (forcePos - origin)
+                        if dir.Magnitude < 1e-4 then dir = Vector3.new(0,0,-1) else dir = dir.Unit end
+                        return Ray.new(origin, dir)
+                    elseif key == "Target" then
+                        return nil
+                    end
+                end
             end
             return oldIndex(self, key)
         end
@@ -557,6 +579,7 @@ end
 if player.Character then bindDeath(player.Character) end
 player.CharacterAdded:Connect(function(c) SilentIsDead = true; bindDeath(c) end)
 
+-- forced aim for AutoShot (mobile-safe: overrides touch click direction)
 task.spawn(function()
     while not destroyed do
         if autoShoot.Enabled and not autoEquip.Busy and not isInLobby() and not SilentIsDead then
@@ -564,11 +587,17 @@ task.spawn(function()
             if char then
                 local weapon = char:FindFirstChildOfClass("Tool")
                 if weapon and isGun(weapon) then
-                    local part = getBestTarget(autoShoot.TargetPart, autoShoot.FOVSize)
-                    if part then
+                    local part, point = getBestTarget(autoShoot.TargetPart, autoShoot.FOVSize)
+                    if part and point then
+                        -- lock mouse.Hit / aim to target for a short window so mobile touch does not redirect the shot
+                        autoForceAim.pos = point
+                        autoForceAim.active = true
+                        autoForceAim.untilT = os.clock() + 0.12
                         pcall(function()
                             weapon:Activate()
-                            task.delay(0.02, function() if weapon.Parent == char then weapon:Deactivate() end end)
+                            task.delay(0.03, function()
+                                if weapon.Parent == char then weapon:Deactivate() end
+                            end)
                         end)
                     end
                 end
@@ -7789,11 +7818,14 @@ end)
 -- ═══════════════════════════════════════════════════════════════
 local stretchConn = nil; local stretchEnabled = false; local STRETCH_FACTOR = 1.6
 local function SetStretched(value)
-    local cam = Workspace.CurrentCamera
     if value then
-        if stretchConn then return end; stretchEnabled = true
+        if stretchConn then return end
+        stretchEnabled = true
         stretchConn = RunService.RenderStepped:Connect(function()
-            if cam then cam.CFrame = cam.CFrame * CFrame.new(0,0,0, STRETCH_FACTOR,0,0, 0,1,0, 0,0,1) end
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+            local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cam.CFrame:GetComponents()
+            cam.CFrame = CFrame.new(x, y, z, r00 * STRETCH_FACTOR, r01, r02, r10, r11, r12, r20 * STRETCH_FACTOR, r21, r22)
         end)
     else
         stretchEnabled = false
@@ -7874,15 +7906,9 @@ local Extras = (function()
     local function startFlyTouchTrackers()
         stopFlyTouchTrackers()
         local touchDescendActive = {}
-        table.insert(flyTouchConns, UserInputService.TouchStarted:Connect(function(input, gpe)
-            if gpe then return end
-            local cam=Workspace.CurrentCamera; local vp=cam and cam.ViewportSize or Vector2.new(1,1)
-            local x,y = input.Position.X, input.Position.Y
-            if x < vp.X*0.35 and y > vp.Y*0.65 then touchDescendActive[input]=true; flyTouchDown=true end
-        end))
-        table.insert(flyTouchConns, UserInputService.TouchEnded:Connect(function(input)
-            if touchDescendActive[input] then touchDescendActive[input]=nil; flyTouchDown=next(touchDescendActive)~=nil end
-        end))
+        -- touch descend disabled (no down with controls)
+        table.insert(flyTouchConns, UserInputService.TouchStarted:Connect(function() end))
+        table.insert(flyTouchConns, UserInputService.TouchEnded:Connect(function() end))
     end
 
     local function flyLoop(dt)
@@ -7904,9 +7930,8 @@ local Extras = (function()
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then ks=ks+1 end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then ks=ks-1 end
         local up=UserInputService:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump or flyTouchUp
-        local down=UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or flyTouchDown
+        -- no descend with Shift/Control
         local dir=M.ComputeFlyDirection(look,right,humanoid.MoveDirection,kf,ks,up)
-        if down then dir=Vector3.new(dir.X,dir.Y-1,dir.Z) end
         local nextPos=root.Position
         if dir.Magnitude < 0.01 then root.Anchored=true
         else
