@@ -73,14 +73,14 @@ local Locale = {
         NotifyLang="Language applied.",
     },
     es = {
-        TabMain="Main", TabEsp="Esp", TabMods="Mods", TabExtras="Extras", TabBotones="Botones", TabAnims="Animaciones",
+        TabMain="Principal", TabEsp="Esp", TabMods="Modificaciones", TabExtras="Extras", TabBotones="Botones", TabAnims="Animaciones",
         SecEnemies="Enemigos", SecAllies="Aliados", SecName="Nombre",
         SecPlayer="Jugador", SecClient="Cliente", SecVisual="Visual", SecCursor="Cursor",
-        Esp="Esp", Names="Nombres", Line="Linea", Studs="Studs",
+        Esp="Esp", Names="Nombres", Line="Línea", Studs="Studs",
         ChangeMyName="Activar Nombre", ChangeAllNames="Activar Para Todos", CustomName="Nombre",
         NamePlaceholder="Escribe el nombre...", GunOnly="Solo Arma", KnifeOnly="Solo Cuchillo",
         RespectReload="Respetar Recarga", RespectKnife="Respetar Cuchillo Equipado",
-        WalkSpeed="Velocidad", Speed="Velocidad", Fly="Volar",
+        WalkSpeed="Velocidad al Caminar", Speed="Velocidad", Fly="Volar",
         KillSound="Sonido de Kill", Sound="Sonido", Volume="Volumen",
         KillEffect="Efecto de Kill", Effect="Efecto", ShootSound="Sonido de Disparo",
         ActivateStreak="Activar Racha", StreakValue="Racha",
@@ -88,20 +88,20 @@ local Locale = {
         ActivateStreakColor="Activar Color De Racha", StreakColor="Color De Racha",
         ApplyCursor="Activar Cursor", CursorGunOnly="Solo Con Arma", CursorKnifeOnly="Solo Con Cuchillo", CursorPicker="Cursor",
         ColorRainbow="Arcoiris", ColorYellow="Amarillo", ColorGreen="Verde", ColorBlue="Azul",
-        ColorPurple="Morado", ColorPink="Rosa", ColorRed="Rojo", ColorBrown="Cafe",
+        ColorPurple="Morado", ColorPink="Rosa", ColorRed="Rojo", ColorBrown="Café",
         ColorWine="Tinto", ColorGold="Dorado", ColorBluePink="Azul y Rosa", ColorPurplePink="Morado y Rosa",
-        SecStatus="Estado", SecPerformance="Rendimiento", SecSkybox="Cielo", SecMenu="Menu",
-        Fps="Fps", Ping="Ping", Size="Tamano", FpsBoost="Quitar Texturas",
+        SecStatus="Estado", SecPerformance="Rendimiento", SecSkybox="Cielo", SecMenu="Menú",
+        Fps="Fps", Ping="Ping", Size="Tamaño", FpsBoost="Quitar Texturas",
         RemoveAccessories="Quitar Accesorios", RemoveAnimations="Quitar Animaciones",
         Skybox="Activar Cielo", Sky="Cielo", Language="Idioma", Apply="Aplicar",
-        SecPosition="Posicion", SecBotones="Botones", LockPosition="Bloquear Posicion",
-        BtnAutoShot="AutoShot", BtnSilent="Silent", BtnAura="Aura Cuchillo", BtnInv="Invisible",
-        BtnCam="CamLock", BtnFly="Volar", BtnBajar="Bajar / Subir", BtnEsp="ESP",
-        SecAutoShot="AutoShot", AutoShot="Disparo automático", AutoEquip="Equipar automático", Target="Objetivo",
-        Head="Cabeza", Torso="Torso", FullBody="Cuerpo completo",
-        SecSilentAim="Silent Aim", SilentAim="Silent Aim",
-        SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Hitbox invisible",
-        SecLegit="Legit", Macro="Macro", TriggerBot="TriggerBot", CamLock="CamLock",
+        SecPosition="Posición", SecBotones="Botones", LockPosition="Bloquear Posición",
+        BtnAutoShot="Disparo Automático", BtnSilent="Apuntado Silencioso", BtnAura="Aura Cuchillo", BtnInv="Invisible",
+        BtnCam="Bloqueo de Cámara", BtnFly="Volar", BtnBajar="Bajar / Subir", BtnEsp="ESP",
+        SecAutoShot="Disparo Automático", AutoShot="Disparo Automático", AutoEquip="Equipar Automático", Target="Objetivo",
+        Head="Cabeza", Torso="Torso", FullBody="Cuerpo Completo",
+        SecSilentAim="Apuntado Silencioso", SilentAim="Apuntado Silencioso",
+        SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Hitbox Invisible",
+        SecLegit="Legit", Macro="Macro", TriggerBot="Disparador Automático", CamLock="Bloqueo de Cámara",
         NotifyLang="Idioma aplicado.",
     },
 }
@@ -109,6 +109,57 @@ local Locale = {
 local function T(key)
     local pack = Locale[LANG] or Locale.en
     return pack[key] or Locale.en[key] or key
+end
+
+-- Referencias de UI para aplicar idioma por clave, no por texto (evita choques entre etiquetas iguales).
+local uiRefs = {}
+local function regUI(el, key, kind)
+    if el then table.insert(uiRefs, { el = el, key = key, kind = kind or "auto" }) end
+    return el
+end
+
+-- WindUI no expone SetTitle en las tabs: hay que tocar el TextLabel interno segun la version.
+local function setTabTitle(tab, text)
+    if not tab then return end
+    text = tostring(text)
+    pcall(function() tab.Title = text end)
+    pcall(function()
+        local uis = tab.UIElements
+        if not uis then return end
+
+        local function setText(obj)
+            if typeof(obj) == "Instance" and obj:IsA("TextLabel") then obj.Text = text end
+        end
+
+        -- version con TabItem
+        local tabItem = uis.TabItem
+        if tabItem then
+            pcall(function()
+                setText(tabItem)
+                local frame = tabItem.Frame
+                if frame then
+                    setText(frame)
+                    if frame.Title then
+                        setText(frame.Title)
+                        setText(frame.Title.TextLabel)
+                    end
+                end
+            end)
+        end
+
+        -- version con Main
+        local main = uis.Main
+        if main then
+            pcall(function()
+                setText(main)
+                local frame = main.Frame
+                if frame then
+                    setText(frame)
+                    for _, d in ipairs(frame:GetDescendants()) do setText(d) end
+                end
+            end)
+        end
+    end)
 end
 
 local function targetPartKey(label)
@@ -156,6 +207,7 @@ if getgenv then getgenv().XitadoWindow = Window end
 
 pcall(function() if Window.Open then Window:Open() end end)
 
+-- Helpers de texto/nieve: se usan solo aqui
 do
 
 local function forceTextSize(obj, size)
@@ -211,6 +263,8 @@ task.spawn(function()
         done[obj] = true
     end
 
+    -- Antes se escaneaba todo el arbol 50 veces al iniciar (5-9s de lag).
+    -- Ahora es una sola pasada y luego solo reaccionamos a lo nuevo.
     for _, root in ipairs(roots) do
         if root and root.Parent then
             pcall(function()
@@ -262,7 +316,7 @@ local function attachSnowflakes()
     RunService.RenderStepped:Connect(function(dt)
         if destroyed or not mainFrame or not mainFrame.Parent then return end
         flakeAcc = flakeAcc + dt
-        if flakeAcc < 0.033 then return end 
+        if flakeAcc < 0.033 then return end -- ~30 fps en vez de 60 para no cargar el render
         local step = flakeAcc
         flakeAcc = 0
         for _, s in ipairs(flakes) do
@@ -287,17 +341,25 @@ local function NewTab(cfg)
     error("[Xitado] No Tab/CreateTab on Window")
 end
 
-local TabMain     = NewTab({ Title = T("TabMain") })
-local TabEsp      = NewTab({ Title = T("TabEsp") })
-local TabMods     = NewTab({ Title = T("TabMods") })
-local TabExtras   = NewTab({ Title = T("TabExtras") })
-local TabBotones  = NewTab({ Title = T("TabBotones") })
-local TabAnims    = NewTab({ Title = T("TabAnims") })
+local TabMain     = regUI(NewTab({ Title = T("TabMain") }), "TabMain", "tab")
+local TabEsp      = regUI(NewTab({ Title = T("TabEsp") }), "TabEsp", "tab")
+local TabMods     = regUI(NewTab({ Title = T("TabMods") }), "TabMods", "tab")
+local TabExtras   = regUI(NewTab({ Title = T("TabExtras") }), "TabExtras", "tab")
+local TabBotones  = regUI(NewTab({ Title = T("TabBotones") }), "TabBotones", "tab")
+local TabAnims    = regUI(NewTab({ Title = T("TabAnims") }), "TabAnims", "tab")
 
-pcall(function()
-    if type(Window.SelectTab) == "function" then Window:SelectTab(TabMain) end
-end)
+local function selectMainTab()
+    pcall(function()
+        if type(TabMain.Select) == "function" then TabMain:Select(); return end
+    end)
+    pcall(function()
+        if type(Window.SelectTab) == "function" then Window:SelectTab(TabMain.Index or TabMain) end
+    end)
+end
 
+selectMainTab()
+
+-- Estados compartidos con la UI y la limpieza; se declaran fuera del scope de combate
 local autoShootEnabled, autoEquipEnabled, silentAimEnabled, silentEquipEnabled
 local espEnemy, espAlly, auraRemote, auraEnabled, AURA_ARG
 local hitboxState, clearGhostHitboxes, limpiarAgresivoHitboxes
@@ -307,18 +369,20 @@ local isEnemy, esCompaneroDeEquipo, esPistola, esCuchillo, oldNamecallHook
 local invisState, setInvisible
 local autoEventFarm
 
+-- Todo el combate corre en su propio scope para no agotar los 200 registers del chunk principal
 local function setupCombat()
 
 local teamCheckEnabled = true
 
-autoShootEnabled    = false
-local autoShootTargetPart = "Torso"
+-- AutoShot agresivo de 01rox (unico modo)
+autoShootEnabled = false
 
 autoEquipEnabled          = false
 local autoEquipRespetarRecarga  = false
 local autoEquipRespetarCuchillo = false
 
-silentAimEnabled    = false
+-- Silent Aim manual de 01rox
+silentAimEnabled = false
 local silentAimTargetPart = "Torso"
 
 silentEquipEnabled          = false
@@ -465,6 +529,7 @@ local function tieneMarcaAliado(targetPlayer)
     return resultado
 end
 
+-- Team check del reference: scoreboard + MatchId + atributos
 local teamState = { Snapshot = {}, LastRefresh = 0, RefreshInterval = 0.12 }
 
 local function refreshScoreboardTeams(force)
@@ -652,18 +717,18 @@ local function estaRecargando(arma)
 end
 
 local EQUIP_TIMEOUT          = 0.6
-local EQUIP_HOLD_TIME        = 0.20  
-local EQUIP_STOW_TIME        = 0.20  
-local EQUIP_REEQUIP_DELAY    = 0.5   
-local RELOAD_RESPECT_WAIT    = 2.5   
+local EQUIP_HOLD_TIME        = 0.10  -- AutoShot: tras sacar el arma, espera para guardarla
+local EQUIP_STOW_TIME        = 0.20  -- tras guardar, espera antes del siguiente ciclo (sin Respetar Recarga)
+local EQUIP_REEQUIP_DELAY    = 0.5   -- usado por el autoequip de Silent Aim
+local RELOAD_RESPECT_WAIT    = 2.5   -- Respetar Recarga (sobrescribe el reequip)
 local SHOOT_SETTLE           = 0.04
 local SHOOT_DEACTIVATE_DELAY = 0.05
 local SHOOT_COOLDOWN         = 0.2
 local AUTO_EQUIP_INTERVAL    = 0.15
 
-local shootBusy       = false
-local lastShootTime   = 0
-local equipBusy       = false
+local shootBusy      = false
+local lastShootTime  = 0
+local equipBusy      = false
 local silentEquipBusy = false
 
 local function waitToolEquipped(tool, humanoid, timeout)
@@ -699,39 +764,41 @@ local function shootOnce(char, hum)
     pcall(function() if tool.Parent == char then tool:Deactivate() end end)
 end
 
-local function primerEnemigoVisible()
+-- Autoequip: se dispara apenas se ve CUALQUIER parte del enemigo (como 01rox).
+local autoEquipRayParams = RaycastParams.new()
+autoEquipRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function autoEquipEnemyPartVisible()
     local char = player.Character
-    if not char then return nil end
-    local head = char:FindFirstChild("Head")
-    if not head then return nil end
+    if not char then return false end
+    local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+    if not head then return false end
     local cam = workspace.CurrentCamera
-    if not cam then return nil end
+    if not cam then return false end
     local viewport = cam.ViewportSize
     local origin = head.Position
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and esEnemigoValido(p) then
             local pChar = p.Character
             if pChar then
-                local part = pChar:FindFirstChild("Head")
-                    or pChar:FindFirstChild("UpperTorso")
-                    or pChar:FindFirstChild("Torso")
-                    or pChar:FindFirstChild("HumanoidRootPart")
-                if part and part:IsA("BasePart") then
-                    local sp, onScreen = cam:WorldToViewportPoint(part.Position)
-                    if onScreen and sp.Z > 0 and sp.X >= 0 and sp.X <= viewport.X and sp.Y >= 0 and sp.Y <= viewport.Y then
-                        params.FilterDescendantsInstances = { char, pChar }
-                        local hit = workspace:Raycast(origin, part.Position - origin, params)
-                        if not hit or (hit.Instance and hit.Instance:IsDescendantOf(pChar)) then
-                            return pChar
+                autoEquipRayParams.FilterDescendantsInstances = { char, pChar }
+                for _, part in ipairs(pChar:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        local sp, onScreen = cam:WorldToViewportPoint(part.Position)
+                        if onScreen and sp.Z > 0 and sp.X >= -40 and sp.X <= viewport.X + 40 and sp.Y >= -40 and sp.Y <= viewport.Y + 40 then
+                            local size = part.Size
+                            local offsets = { Vector3.zero, Vector3.new(0, size.Y / 2.1, 0), Vector3.new(0, -size.Y / 2.1, 0) }
+                            for _, off in ipairs(offsets) do
+                                local hit = workspace:Raycast(origin, (part.CFrame * off) - origin, autoEquipRayParams)
+                                if not hit or (hit.Instance and hit.Instance:IsDescendantOf(pChar)) then return true end
+                            end
                         end
                     end
                 end
             end
         end
     end
-    return nil
+    return false
 end
 
 limpiarAgresivoHitboxes = function()
@@ -795,6 +862,9 @@ task.spawn(function()
     end
 end)
 
+-- ============================================================
+-- Separadores del reference: Hitbox y Legit (debajo de Silent Aim)
+-- ============================================================
 hitboxState = { Enabled = false, Size = 5, Transparency = 0.6 }
 
 clearGhostHitboxes = function()
@@ -860,7 +930,7 @@ legitMacroEnabled = false
 local macroBusy = false
 macroTouch = { MinXFraction = 0.45, DragPx = 10, MaxTapTime = 0.3, Active = {}, StartPos = {}, WasDrag = {}, StartTime = {} }
 local macroLastClickTime = 0
-local MACRO_CLICK_DEDUPE = 0.25 
+local MACRO_CLICK_DEDUPE = 0.25 -- un tap genera Touch y MouseButton1: solo un disparo real
 legitConns = {}
 
 camlockEnabled = false
@@ -958,24 +1028,8 @@ local function macroCanRun()
     return true
 end
 
-local macroAimRayParams = RaycastParams.new()
-macroAimRayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local function macroAimTargetAt(screenPos)
-    local cam = Workspace.CurrentCamera
-    if not cam or not screenPos then return nil end
-    local ray = cam:ViewportPointToRay(screenPos.X, screenPos.Y, 0)
-    macroAimRayParams.FilterDescendantsInstances = { player.Character }
-    local hit = Workspace:Raycast(ray.Origin, ray.Direction * 900, macroAimRayParams)
-    local part = hit and hit.Instance or nil
-    if not part then return nil end
-    local model = part:FindFirstAncestorOfClass("Model")
-    local plr = model and Players:GetPlayerFromCharacter(model)
-    if not plr or not esEnemigoValido(plr) then return nil end
-    return part
-end
-
-local function runLegitMacro(screenPos)
+-- Macro: al picar SOLO saca el arma. No dispara y no la guarda.
+local function runLegitMacro()
     if not macroCanRun() then return end
     local nowClick = os.clock()
     if nowClick - macroLastClickTime < MACRO_CLICK_DEDUPE then return end
@@ -983,25 +1037,10 @@ local function runLegitMacro(screenPos)
     macroBusy = true
     local char = player.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not char or not hum or hum.Health <= 0 then macroBusy = false; return end
-    local gun = obtenerPistola()
-    if gun then
-        
-        if gun.Parent ~= char then pcall(function() hum:EquipTool(gun) end); task.wait(0.04) end
-        if macroCanRun() and gun.Parent == player.Character then
-            local aimPart = macroAimTargetAt(screenPos)
-            if aimPart then getgenv().XitadoHubTargetPart = aimPart end
-        
-            pcall(function() gun:Activate() end)
-            task.wait(0.04)
-        
-            pcall(function()
-                if gun.Parent == player.Character then gun:Deactivate() end
-                hum:UnequipTools()
-            end)
-            if aimPart and not silentAimEnabled and not autoShootEnabled then
-                getgenv().XitadoHubTargetPart = nil
-            end
+    if char and hum and hum.Health > 0 then
+        local gun = obtenerPistola()
+        if gun and gun.Parent ~= char then
+            pcall(function() hum:EquipTool(gun) end)
         end
     end
     macroBusy = false
@@ -1010,7 +1049,7 @@ end
 table.insert(legitConns, UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or not legitMacroEnabled or not macroCanRun() then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        task.spawn(runLegitMacro, UserInputService:GetMouseLocation())
+        task.spawn(runLegitMacro)
     elseif input.UserInputType == Enum.UserInputType.Touch then
         local cam = Workspace.CurrentCamera
         local width = cam and cam.ViewportSize.X or 0
@@ -1045,10 +1084,10 @@ table.insert(legitConns, UserInputService.InputEnded:Connect(function(input)
     macroTouch.StartPos[input] = nil
     macroTouch.WasDrag[input] = nil
     macroTouch.StartTime[input] = nil
-    
+    -- Solo cuenta como click real: toque corto, sin arrastrar (mantener para apuntar no dispara)
     local isRealClick = wasActive and not wasDrag
         and startTime ~= nil and (os.clock() - startTime) <= macroTouch.MaxTapTime
-    if isRealClick then task.spawn(runLegitMacro, startPos) end
+    if isRealClick then task.spawn(runLegitMacro) end
 end))
 
 table.insert(legitConns, UserInputService.WindowFocusReleased:Connect(function()
@@ -1058,13 +1097,14 @@ table.insert(legitConns, UserInputService.WindowFocusReleased:Connect(function()
     table.clear(macroTouch.StartTime)
 end))
 
+-- Auto Equip de AutoShot: ver parte visible -> sacar 0.10s -> guardar -> esperar 0.20s (o 2.5s con Respetar Recarga).
 task.spawn(function()
     while task.wait(AUTO_EQUIP_INTERVAL) do
         if destroyed then break end
-        if not autoEquipEnabled then continue end
-        if not autoShootEnabled then continue end
+        if not (autoShootEnabled and autoEquipEnabled) then continue end
+        if legitMacroEnabled then continue end -- la macro maneja el arma por si sola
         if not IsInMatchStrict() then continue end
-        if equipBusy then continue end
+        if equipBusy or silentEquipBusy then continue end
 
         local char = player.Character
         if not char then continue end
@@ -1073,104 +1113,157 @@ task.spawn(function()
 
         local held = char:FindFirstChildOfClass("Tool")
         if autoEquipRespetarCuchillo and held and esCuchillo(held) then continue end
+        if held and esPistola(held) then continue end
 
-        local gun = obtenerPistola()
-        if not gun then continue end
-
-        if not primerEnemigoVisible() then continue end
+        if not autoEquipEnemyPartVisible() then continue end
+        if not obtenerPistola() then continue end
 
         equipBusy = true
-        local equipped = pcall(equipGunOnce)
-        if equipped then
+        local okEquip, didEquip = pcall(equipGunOnce)
+        if okEquip and didEquip then
             task.wait(EQUIP_HOLD_TIME)
             local humNow = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
             if humNow then pcall(function() humNow:UnequipTools() end) end
-
-            local nextCycleDelay = autoEquipRespetarRecarga and RELOAD_RESPECT_WAIT or EQUIP_STOW_TIME
-            task.wait(nextCycleDelay)
+            task.wait(autoEquipRespetarRecarga and RELOAD_RESPECT_WAIT or EQUIP_STOW_TIME)
         end
         equipBusy = false
     end
 end)
 
-TabMain:Section({ Title = T("SecAutoShot") })
+-- Auto Equip de Silent Aim: sacar el arma al detectar enemigo y NO guardarla hasta que el jugador dispare.
+task.spawn(function()
+    while task.wait(AUTO_EQUIP_INTERVAL) do
+        if destroyed then break end
+        if not (silentAimEnabled and silentEquipEnabled) then continue end
+        if legitMacroEnabled then continue end -- la macro maneja el arma por si sola
+        if not IsInMatchStrict() then continue end
+        if silentEquipBusy or equipBusy then continue end
 
-UIElements.TogAutoShoot = TabMain:Toggle({
+        local char = player.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+
+        local held = char:FindFirstChildOfClass("Tool")
+        if silentEquipRespetarCuchillo and held and esCuchillo(held) then continue end
+        if not (held and esPistola(held)) then
+            if not autoEquipEnemyPartVisible() then continue end
+            if not obtenerPistola() then continue end
+            if not pcall(equipGunOnce) then continue end
+            held = char:FindFirstChildOfClass("Tool")
+            if not (held and esPistola(held)) then continue end
+        end
+
+        silentEquipBusy = true
+        local holdTool = held
+        task.spawn(function()
+            local fired = false
+            local conn = nil
+            pcall(function()
+                conn = holdTool.Activated:Connect(function() fired = true end)
+            end)
+
+            -- Sin timeout: el arma se queda afuera hasta que el usuario dispare.
+            while task.wait(0.05) do
+                if destroyed or not silentAimEnabled or not silentEquipEnabled then break end
+                if fired then break end
+                local c = player.Character
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if not c or not h or h.Health <= 0 then break end
+                if c:FindFirstChildOfClass("Tool") ~= holdTool then break end
+            end
+
+            if conn then pcall(function() conn:Disconnect() end) end
+
+            if silentEquipRespetarRecarga then
+                local waitStart = os.clock()
+                while os.clock() - waitStart < RELOAD_RESPECT_WAIT do
+                    local gun = player.Character and player.Character:FindFirstChildOfClass("Tool")
+                    if not gun or not estaRecargando(gun) then break end
+                    task.wait(0.05)
+                end
+            end
+
+            local cNow = player.Character
+            local hNow = cNow and cNow:FindFirstChildOfClass("Humanoid")
+            if hNow then pcall(function() hNow:UnequipTools() end) end
+            task.wait(EQUIP_REEQUIP_DELAY)
+            silentEquipBusy = false
+        end)
+    end
+end)
+
+regUI(TabMain:Section({ Title = T("SecAutoShot") }), "SecAutoShot")
+
+UIElements.TogAutoShoot = regUI(TabMain:Toggle({
     Title = T("AutoShot"),
     Callback = function(Value)
         autoShootEnabled = Value
         if not Value then
             limpiarAgresivoHitboxes()
-            getgenv().XitadoHubTargetPart = nil
+            if not silentAimEnabled then getgenv().XitadoHubTargetPart = nil end
         end
     end
-})
+}), "AutoShot")
 
-UIElements.TogAutoEquip = TabMain:Toggle({
+UIElements.TogAutoEquip = regUI(TabMain:Toggle({
     Title = T("AutoEquip"),
     Value = false,
     Callback = function(Value) autoEquipEnabled = Value end
-})
+}), "AutoEquip")
 
-UIElements.TogAutoEquipRecarga = TabMain:Toggle({
+UIElements.TogAutoEquipRecarga = regUI(TabMain:Toggle({
     Title = T("RespectReload"),
     Value = false,
     Callback = function(Value) autoEquipRespetarRecarga = Value end
-})
+}), "RespectReload")
 
-UIElements.TogAutoEquipCuchillo = TabMain:Toggle({
+UIElements.TogAutoEquipCuchillo = regUI(TabMain:Toggle({
     Title = T("RespectKnife"),
     Value = false,
     Callback = function(Value) autoEquipRespetarCuchillo = Value end
-})
+}), "RespectKnife")
 
-UIElements.DropAutoShootPart = TabMain:Dropdown({
-    Title = T("Target"),
-    Values = { T("Head"), T("Torso"), T("FullBody") },
-    Value = T("Torso"),
-    Callback = function(Value) autoShootTargetPart = targetPartKey(Value) end
-})
+regUI(TabMain:Section({ Title = T("SecSilentAim") }), "SecSilentAim")
 
-TabMain:Section({ Title = T("SecSilentAim") })
-
-UIElements.TogSilentAim = TabMain:Toggle({
+UIElements.TogSilentAim = regUI(TabMain:Toggle({
     Title = T("SilentAim"),
     Callback = function(Value)
         silentAimEnabled = Value
-        if not Value then getgenv().XitadoHubTargetPart = nil end
+        if not Value and not autoShootEnabled then getgenv().XitadoHubTargetPart = nil end
     end
-})
+}), "SilentAim")
 
-UIElements.TogSilentEquip = TabMain:Toggle({
+UIElements.TogSilentEquip = regUI(TabMain:Toggle({
     Title = T("AutoEquip"),
     Value = false,
     Callback = function(Value) silentEquipEnabled = Value end
-})
+}), "AutoEquip")
 
-UIElements.TogSilentEquipRecarga = TabMain:Toggle({
+UIElements.TogSilentEquipRecarga = regUI(TabMain:Toggle({
     Title = T("RespectReload"),
     Value = false,
     Callback = function(Value) silentEquipRespetarRecarga = Value end
-})
+}), "RespectReload")
 
-UIElements.TogSilentEquipCuchillo = TabMain:Toggle({
+UIElements.TogSilentEquipCuchillo = regUI(TabMain:Toggle({
     Title = T("RespectKnife"),
     Value = false,
     Callback = function(Value) silentEquipRespetarCuchillo = Value end
-})
+}), "RespectKnife")
 
-UIElements.DropSilentAimPart = TabMain:Dropdown({
+UIElements.DropSilentAimPart = regUI(TabMain:Dropdown({
     Title = T("Target"),
     Values = { T("Head"), T("Torso"), T("FullBody") },
     Value = T("Torso"),
     Callback = function(Value) silentAimTargetPart = targetPartKey(Value) end
-})
+}), "Target")
 
 getgenv().XitadoHubTargetPart = nil
 
-TabMain:Section({ Title = T("SecHitbox") })
+regUI(TabMain:Section({ Title = T("SecHitbox") }), "SecHitbox")
 
-UIElements.TogHitbox = TabMain:Toggle({
+UIElements.TogHitbox = regUI(TabMain:Toggle({
     Title = T("Hitbox"),
     Value = false,
     Callback = function(Value)
@@ -1178,17 +1271,17 @@ UIElements.TogHitbox = TabMain:Toggle({
         if Value then hitboxState.Transparency = 0.6 end
         if not Value then clearGhostHitboxes() end
     end,
-})
+}), "Hitbox")
 
-UIElements.InpHitboxSize = TabMain:Input({
+UIElements.InpHitboxSize = regUI(TabMain:Input({
     Title = T("Size"), Placeholder = "5 (0-33)", Value = "5",
     Callback = function(text)
         local n = tonumber(text)
         if n then hitboxState.Size = math.clamp(n, 1, 33) end
     end,
-})
+}), "Size")
 
-UIElements.TogHitboxInvisible = TabMain:Toggle({
+UIElements.TogHitboxInvisible = regUI(TabMain:Toggle({
     Title = T("HitboxInvisible"),
     Value = false,
     Callback = function(Value)
@@ -1199,19 +1292,19 @@ UIElements.TogHitboxInvisible = TabMain:Toggle({
             hitboxState.Transparency = 0.6
         end
     end,
-})
+}), "HitboxInvisible")
 
-UIElements.InpHitboxSizeInvisible = TabMain:Input({
+UIElements.InpHitboxSizeInvisible = regUI(TabMain:Input({
     Title = T("Size"), Placeholder = "5 (0-33)", Value = "5",
     Callback = function(text)
         local n = tonumber(text)
         if n then hitboxState.Size = math.clamp(n, 1, 33) end
     end,
-})
+}), "Size")
 
-TabMain:Section({ Title = T("SecLegit") })
+regUI(TabMain:Section({ Title = T("SecLegit") }), "SecLegit")
 
-UIElements.TogMacro = TabMain:Toggle({
+UIElements.TogMacro = regUI(TabMain:Toggle({
     Title = T("Macro"),
     Value = false,
     Callback = function(Value)
@@ -1223,24 +1316,24 @@ UIElements.TogMacro = TabMain:Toggle({
             table.clear(macroTouch.StartTime)
         end
     end,
-})
+}), "Macro")
 
-UIElements.TogTriggerBot = TabMain:Toggle({
+UIElements.TogTriggerBot = regUI(TabMain:Toggle({
     Title = T("TriggerBot"),
     Value = false,
     Callback = function(Value) legitTriggerEnabled = Value end,
-})
+}), "TriggerBot")
 
-UIElements.TogCamLock = TabMain:Toggle({
+UIElements.TogCamLock = regUI(TabMain:Toggle({
     Title = T("CamLock"),
     Value = false,
     Callback = function(Value)
         camlockEnabled = Value
         if not Value then camlockTarget = nil end
     end,
-})
+}), "CamLock")
 
-UIElements.TogGunOnly = TabMain:Toggle({
+UIElements.TogGunOnly = regUI(TabMain:Toggle({
     Title = T("GunOnly"),
     Value = false,
     Callback = function(Value)
@@ -1251,9 +1344,9 @@ UIElements.TogGunOnly = TabMain:Toggle({
             if other and other.Set then pcall(function() other:Set(false) end) end
         end
     end,
-})
+}), "GunOnly")
 
-UIElements.TogKnifeOnly = TabMain:Toggle({
+UIElements.TogKnifeOnly = regUI(TabMain:Toggle({
     Title = T("KnifeOnly"),
     Value = false,
     Callback = function(Value)
@@ -1264,14 +1357,14 @@ UIElements.TogKnifeOnly = TabMain:Toggle({
             if other and other.Set then pcall(function() other:Set(false) end) end
         end
     end,
-})
+}), "KnifeOnly")
 
 legitToggles.GunOnly = UIElements.TogGunOnly
 legitToggles.KnifeOnly = UIElements.TogKnifeOnly
 
 local SILENT_BULLET_SPEED = 99999
 local SILENT_MAX_LEAD_VEL = 0
-local SILENT_MIN_DIR      = 5
+local SILENT_MIN_DIR      = 20 -- 01rox: solo redirige disparos reales, no raycasts de camara
 
 local function predictSilentAimPosition(origin, target)
     if not target or not target.Parent then return origin end
@@ -1355,64 +1448,6 @@ local function findSilentTarget()
     return bestPart
 end
 
-task.spawn(function()
-    while task.wait(AUTO_EQUIP_INTERVAL) do
-        if destroyed then break end
-        if not silentAimEnabled then continue end
-        if not silentEquipEnabled then continue end
-        if not IsInMatchStrict() then continue end
-        if silentEquipBusy then continue end
-
-        local char = player.Character
-        if not char then continue end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-
-        local held = char:FindFirstChildOfClass("Tool")
-        if held and esPistola(held) then continue end
-        if silentEquipRespetarCuchillo and held and esCuchillo(held) then continue end
-
-        local targetPart = findSilentTarget()
-        if not targetPart then continue end
-        local enemyChar = targetPart:FindFirstAncestorOfClass("Model")
-        if not enemyChar then continue end
-
-        silentEquipBusy = true
-
-        local delay = silentEquipRespetarRecarga and RELOAD_RESPECT_WAIT or EQUIP_REEQUIP_DELAY
-        local start = os.clock()
-        while os.clock() - start < delay do
-            local g = obtenerPistola()
-            if not g or not estaRecargando(g) then break end
-            task.wait(0.05)
-        end
-
-        pcall(equipGunOnce)
-
-        local fired = false
-        local activatedConn = nil
-        local equippedTool = player.Character and player.Character:FindFirstChildOfClass("Tool")
-        if equippedTool then
-            activatedConn = equippedTool.Activated:Connect(function() fired = true end)
-        end
-
-        local observeStart = os.clock()
-        while os.clock() - observeStart < 30 do
-            if destroyed or fired then break end
-            local enemyHum = enemyChar:FindFirstChildOfClass("Humanoid")
-            if not enemyChar.Parent or not enemyHum or enemyHum.Health <= 0 then break end
-            task.wait(0.05)
-        end
-
-        if activatedConn then pcall(function() activatedConn:Disconnect() end) end
-        local charNow = player.Character
-        local humNow = charNow and charNow:FindFirstChildOfClass("Humanoid")
-        if humNow then pcall(function() humNow:UnequipTools() end) end
-
-        silentEquipBusy = false
-    end
-end)
-
 oldNamecallHook = nil
 if hookmetamethod and getnamecallmethod and checkcaller then
     oldNamecallHook = hookmetamethod(game, "__namecall", function(self, ...)
@@ -1423,27 +1458,31 @@ if hookmetamethod and getnamecallmethod and checkcaller then
         end
         if not checkcaller() and getgenv().XitadoHubTargetPart then
             local target = getgenv().XitadoHubTargetPart
+            local camNow = workspace.CurrentCamera
+            local cameraOrigin = camNow and camNow.CFrame.Position
             if not (target and target.Parent) then
                 getgenv().XitadoHubTargetPart = nil
                 return oldNamecallHook(self, ...)
             end
             if method == "Raycast" and self == workspace then
                 local origin, direction, p3 = ...
-                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude >= SILENT_MIN_DIR then
+                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude > SILENT_MIN_DIR
+                    and cameraOrigin and (origin - cameraOrigin).Magnitude >= 1 then
                     local predicted = predictSilentAimPosition(origin, target)
                     local newDir = (predicted - origin)
                     if newDir.Magnitude > 0.001 then
-                        newDir = newDir.Unit * math.max(direction.Magnitude, 5000)
+                        newDir = newDir.Unit * 5000
                         return oldNamecallHook(self, origin, newDir, p3)
                     end
                 end
             elseif self == workspace and typeof(method) == "string" and method:sub(1, 13) == "FindPartOnRay" then
                 local ray, p2, p3, p4 = ...
-                if typeof(ray) == "Ray" and ray.Direction.Magnitude >= SILENT_MIN_DIR then
+                if typeof(ray) == "Ray" and ray.Direction.Magnitude > SILENT_MIN_DIR
+                    and cameraOrigin and (ray.Origin - cameraOrigin).Magnitude >= 1 then
                     local predicted = predictSilentAimPosition(ray.Origin, target)
                     local newDir = (predicted - ray.Origin)
                     if newDir.Magnitude > 0.001 then
-                        newDir = newDir.Unit * math.max(ray.Direction.Magnitude, 5000)
+                        newDir = newDir.Unit * 5000
                         local newRay = Ray.new(ray.Origin, newDir)
                         return oldNamecallHook(self, newRay, p2, p3, p4)
                     end
@@ -1456,90 +1495,129 @@ else
     warn("[Xitado Hub] Hook de raycast no disponible en este entorno.")
 end
 
-task.spawn(function()
-    while task.wait(0.03) do
-        if destroyed then break end
-        if macroBusy then continue end
-        local wantSilent = silentAimEnabled and not estaEnLobby()
-        if not wantSilent then
-            if not autoShootEnabled then getgenv().XitadoHubTargetPart = nil end
-            continue
-        end
-        local part = findSilentTarget()
-        if part then
-            getgenv().XitadoHubTargetPart = part
-        else
-            if not autoShootEnabled then getgenv().XitadoHubTargetPart = nil end
-        end
-    end
-end)
-
+-- Silent Aim manual de 01rox: parte visible mas cercana al jugador.
 task.spawn(function()
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     while task.wait(0.1) do
         if destroyed then break end
-        if macroBusy then continue end 
-        if not autoShootEnabled or estaEnLobby() then
-            getgenv().XitadoHubTargetPart = nil
+        if macroBusy then continue end -- no pisar el objetivo elegido por la macro
+        if not silentAimEnabled or estaEnLobby() then
+            if not autoShootEnabled then getgenv().XitadoHubTargetPart = nil end
             continue
         end
-        if shootBusy then continue end
         local char = player.Character
         if not char then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
         local root = char:FindFirstChild("HumanoidRootPart")
         if not hum or hum.Health <= 0 or not root then continue end
-        local tool = char:FindFirstChildOfClass("Tool")
-        if not tool or not esPistola(tool) or not tool:FindFirstChild("Handle") then getgenv().XitadoHubTargetPart = nil; continue end
-        if estaRecargando(tool) then getgenv().XitadoHubTargetPart = nil; continue end
         local head = char:FindFirstChild("Head")
         local headPos = head and head.Position or root.Position
         local myPos = root.Position
         local closestPart, shortestDist = nil, math.huge
         for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player and isEnemy(p) and p.Character then
+            if p ~= player and esEnemigoValido(p) and p.Character then
                 local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
                 if enemyHum and enemyHum.Health > 0 then
                     params.FilterDescendantsInstances = { char, p.Character }
-                    local function ProcesarParte(part)
+                    for _, part in ipairs(silentGetAimParts(p.Character)) do
                         local dist = (part.Position - myPos).Magnitude
-                        if dist >= shortestDist then return end
-                        local size = part.Size
-                        local offsets = { Vector3.zero, Vector3.new(0, size.Y / 2.1, 0), Vector3.new(0, -size.Y / 2.1, 0) }
-                        for _, offset in ipairs(offsets) do
-                            if not workspace:Raycast(headPos, (part.CFrame * offset) - headPos, params) then
-                                shortestDist = dist; closestPart = part; return
-                            end
-                        end
-                    end
-                    if autoShootTargetPart == "FullBody" then
-                        for _, part in ipairs(p.Character:GetChildren()) do
-                            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then ProcesarParte(part) end
-                        end
-                    elseif autoShootTargetPart == "Head" then
-                        local h = p.Character:FindFirstChild("Head")
-                        if h and h:IsA("BasePart") then ProcesarParte(h) end
-                    else
-                        for _, name in ipairs({ "UpperTorso", "Torso", "HumanoidRootPart" }) do
-                            local part = p.Character:FindFirstChild(name)
-                            if part and part:IsA("BasePart") then ProcesarParte(part) end
+                        if dist < shortestDist and silentPartVisible(headPos, part, char, p.Character, params) then
+                            shortestDist = dist
+                            closestPart = part
                         end
                     end
                 end
             end
         end
-        if not closestPart then getgenv().XitadoHubTargetPart = nil; continue end
+        if closestPart then
+            getgenv().XitadoHubTargetPart = closestPart
+        elseif not autoShootEnabled then
+            getgenv().XitadoHubTargetPart = nil
+        end
+    end
+end)
+
+-- AutoShot agresivo de 01rox: barre todas las partes visibles (menos HumanoidRootPart).
+task.spawn(function()
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    while task.wait(0.1) do
+        if destroyed then break end
+        if macroBusy then continue end -- no pisar el objetivo elegido por la macro
+        if not autoShootEnabled or estaEnLobby() then
+            if not silentAimEnabled then getgenv().XitadoHubTargetPart = nil end
+            continue
+        end
+        if shootBusy then continue end
+        local char = player.Character
+        if not char then continue end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool or not tool:FindFirstChild("Handle") or esCuchillo(tool) then
+            getgenv().XitadoHubTargetPart = nil
+            continue
+        end
+        local head = char:FindFirstChild("Head")
+        local headPos = head and head.Position or root.Position
+        local myPos = root.Position
+        local closestPart, shortestDist = nil, math.huge
+        local closestTorso, torsoDist = nil, math.huge -- prioridad: disparar al torso si esta visible
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and esEnemigoValido(p) and p.Character then
+                local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
+                if enemyHum and enemyHum.Health > 0 then
+                    params.FilterDescendantsInstances = { char, p.Character }
+                    for _, part in ipairs(p.Character:GetChildren()) do
+                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                            local dist = (part.Position - myPos).Magnitude
+                            local isTorso = part.Name == "UpperTorso" or part.Name == "Torso"
+                            if isTorso then
+                                if dist >= torsoDist then continue end
+                            elseif dist >= shortestDist then
+                                continue
+                            end
+                            local size = part.Size
+                            local offsets = { Vector3.zero, Vector3.new(0, size.Y / 2.1, 0), Vector3.new(0, -size.Y / 2.1, 0) }
+                            for _, off in ipairs(offsets) do
+                                if not workspace:Raycast(headPos, (part.CFrame * off) - headPos, params) then
+                                    if isTorso then
+                                        torsoDist = dist
+                                        closestTorso = part
+                                    else
+                                        shortestDist = dist
+                                        closestPart = part
+                                    end
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        closestPart = closestTorso or closestPart -- torso tiene prioridad sobre cualquier otra parte
+        if not closestPart then
+            if not silentAimEnabled then getgenv().XitadoHubTargetPart = nil end
+            continue
+        end
         if os.clock() - lastShootTime < SHOOT_COOLDOWN then continue end
         shootBusy = true
         getgenv().XitadoHubTargetPart = closestPart
-        pcall(shootOnce, char, hum)
         lastShootTime = os.clock()
-        task.wait(SHOOT_DEACTIVATE_DELAY)
+        pcall(function()
+            tool:Activate()
+            task.delay(0.05, function()
+                if tool.Parent == char then tool:Deactivate() end
+            end)
+        end)
+        task.wait(0.2)
         shootBusy = false
     end
 end)
 
+-- Autofarm del reference: arranca automaticamente cada vez que entra en partida
 autoEventFarm = { Active = false, Remote = nil, Running = false }
 
 local function getEventRemote()
@@ -1616,6 +1694,7 @@ end
 
 setupCombat()
 
+-- ESP: highlight, linea, nombre y distancia para enemigos y aliados
 local activeESPs     = {}
 local MAX_ESP_DISTANCE = 4000
 local espConnection  = nil
@@ -1806,6 +1885,7 @@ end)
 
 espRemoveConn = Players.PlayerRemoving:Connect(function(p) cleanESP(p) end)
 
+-- Animaciones: packs con logica real (guarda originales, aplica y restaura)
 local AnimState = { Selected = nil, SelectedName = nil, Switching = false, Original = nil, Toggles = {} }
 local AnimPacks = {
     { Name = "Astronaut", Ids = { idle1="http://www.roblox.com/asset/?id=891621366",idle2="http://www.roblox.com/asset/?id=891633237",walk="http://www.roblox.com/asset/?id=891667138",run="http://www.roblox.com/asset/?id=891636393",jump="http://www.roblox.com/asset/?id=891627522",fall="http://www.roblox.com/asset/?id=891617961" }},
@@ -1895,6 +1975,7 @@ player.CharacterAdded:Connect(function(char)
     end
 end)
 
+-- Extras / Estado: HUD de FPS y Ping
 local perfHUD = { ShowFPS=false, ShowPing=false, Size=1.0, Gui=nil, FpsLabel=nil, PingLabel=nil, Conn=nil,
     _fpsAccum=0, _fpsFrames=0, _fpsTimer=0, _lastFPS=0 }
 
@@ -1978,6 +2059,7 @@ local function rebuildPerfHUD()
     end)
 end
 
+-- Extras / Rendimiento
 local accessoryRemove = { Enabled = false, Cache = {}, Conns = {} }
 local function removeAccessoriesFromChar(char)
     if not char then return end
@@ -2130,6 +2212,7 @@ local function setLowGraphics(on)
     end
 end
 
+-- Extras / Skybox
 local skybox = {
     Current = "Space Wave 2",
     Data = {
@@ -2177,6 +2260,7 @@ local function applySkybox(name)
     sky.Parent = Lighting
 end
 
+-- Botones / funciones que controlan los botones flotantes
 local buttons, buttonDefs = {}, {}
 local auraState = { Enabled = false, Conn = nil, Acc = 0 }
 local AURA_RANGE = 20
@@ -2503,6 +2587,7 @@ local function doSubir()
     destroyBajarFloor(); bajarState.Enabled = false; bajarState.ActivationPos = nil
 end
 
+-- Invisibilidad en su propio scope (libera registers del chunk principal)
 local function setupInvisibility()
 
 invisState = {
@@ -2681,7 +2766,7 @@ local function startInvisFlight()
     local isTouch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
     s.OrigPos = s.Root.Position; s.OrigAutoRotate = s.Hum.AutoRotate; s.OrigPlatformStand = s.Hum.PlatformStand
     s.OrigJumpHeight = s.Hum.JumpHeight; s.OrigJumpPower = s.Hum.JumpPower
-    
+    -- En celular el joystick no genera teclas WASD: usamos MoveDirection y un piso mas alto
     s.WalkSpeed = math.max(s.Hum.WalkSpeed, isTouch and 30 or 16)
     s.GroundOffset = nil; s.SmoothY = nil; s.LastGroundPos = s.OrigPos; s.LastMirror = 0
     if not s.MirrorParams then
@@ -2795,8 +2880,20 @@ end
 setupInvisibility()
 
 local Feat = {}
-Feat.AutoShot = { get = function() return autoShootEnabled end, set = function(v) autoShootEnabled = v end }
-Feat.SilentAim = { get = function() return silentAimEnabled end, set = function(v) silentAimEnabled = v end }
+Feat.AutoShot = {
+    get = function() return autoShootEnabled end,
+    set = function(v)
+        autoShootEnabled = v
+        if not v then getgenv().XitadoHubTargetPart = nil end
+    end,
+}
+Feat.SilentAim = {
+    get = function() return silentAimEnabled end,
+    set = function(v)
+        silentAimEnabled = v
+        if not v then getgenv().XitadoHubTargetPart = nil end
+    end,
+}
 Feat.Esp = { get = function() return espEnemy.Enabled end, set = function(v) espEnemy.Enabled = v == true end }
 Feat.KnifeAura = { get = function() return auraState.Enabled end, set = function(v) setAura(v) end }
 Feat.Invisible = { get = function() return invisState.Enabled end, set = function(v) setInvisible(v) end }
@@ -2817,6 +2914,7 @@ local function FeatToggle(name)
     if type(f) == "table" then FeatSet(name, not f.get()) end
 end
 
+-- Botones flotantes: estilo del reference, con nombres Xitado y logica real
 local floatConns = {}
 buttons, buttonDefs = {}, {}
 local pollConn, pollAcc = nil, 0
@@ -3006,6 +3104,10 @@ buttonDefs.Bajar = {
     end,
 }
 
+-- ============================================================
+-- Mods (todo en este cliente; sin tag de Content Creator)
+-- Funcion propia para no exceder los 200 registers del chunk principal
+-- ============================================================
 local function setupMods()
 
 local MOD_DEATH_SOUND_NAMES = {
@@ -3112,17 +3214,17 @@ local modKillLastPlay = 0
 local MOD_KILL_PLAY_COOLDOWN = 0.2
 local modLastAnyKill = 0
 local modLastKillHadTarget = false
-local MOD_KILL_GLOBAL_COOLDOWN = 0.2     
-local MOD_KILL_STAT_COOLDOWN = 1.0       
-local MOD_KILL_STAT_ECHO_COOLDOWN = 1.5  
-local MOD_KILL_TARGET_DEDUPE_TIME = 3     
+local MOD_KILL_GLOBAL_COOLDOWN = 0.2      -- entre kills reales con target (no frena el aura)
+local MOD_KILL_STAT_COOLDOWN = 1.0        -- entre señales de leaderstats/atributos
+local MOD_KILL_STAT_ECHO_COOLDOWN = 1.5   -- eco de stats despues de un kill con target
+local MOD_KILL_TARGET_DEDUPE_TIME = 3     -- una misma victima no vuelve a sonar en este tiempo
 local function modPlayKillSound()
     if destroyed or not modKillSound.Enabled then return end
     local id = ModKillSounds[modKillSound.Selected]
     if not id then return end
     local now = os.clock()
     if now - modKillLastPlay < MOD_KILL_PLAY_COOLDOWN then return end
-    
+    -- Si otra señal de kill todavia tiene una copia sonando, no crear una segunda.
     local playingCopy = false
     pcall(function()
         for _, obj in ipairs(SoundService:GetChildren()) do
@@ -3160,6 +3262,7 @@ local function modAddFX(name, color)
     ModFXInfo[name] = { Name = name, Color = color, Asset = name, Heavy = true }
 end
 
+-- Solo se usan los efectos cargados por HTTP; no se agregan efectos locales.
 local MOD_HEAVY_COLORS = {
     Frostbite = Color3.fromRGB(40, 90, 160),
     SakuraEffect = Color3.fromRGB(255, 160, 190),
@@ -3348,7 +3451,8 @@ local function modConfirmLocalKill(body, deathCF)
     if destroyed then return end
     local nowAll = os.clock()
     local target = typeof(body) == "Instance" and body or nil
-
+    -- Un mismo kill dispara varias fuentes (remote/tag, Died, leaderstats, atributos).
+    -- Las señales de stats son las que llegan tarde y hacian sonar el sonido dos veces.
     local cooldown = MOD_KILL_GLOBAL_COOLDOWN
     if not target then
         cooldown = modLastKillHadTarget and MOD_KILL_STAT_ECHO_COOLDOWN or MOD_KILL_STAT_COOLDOWN
@@ -3464,7 +3568,7 @@ end
 local function modOnEnemyDied(char)
     if destroyed or not char or modPendingDeath[char] then return end
     modPendingDeath[char] = true
-    
+    -- Logica de clanxitado: el tag "creator" del Humanoid confirma que el kill fue nuestro
     local hum = char:FindFirstChildOfClass("Humanoid")
     local tag = hum and hum:FindFirstChild("creator")
     local tagConfirmed = tag ~= nil and tag.Value == player
@@ -3511,6 +3615,7 @@ local function modStartKillDetection()
     end))
 end
 
+-- Todos los sonidos de kill tambien estan disponibles en Shoot Sound.
 local ModShootSounds = ModKillSounds
 local modShootNames = {}
 for name in pairs(ModShootSounds) do table.insert(modShootNames, name) end
@@ -3626,6 +3731,7 @@ local function modStartWalk()
     end)
 end
 
+-- Racha y colores: solo el HeadTag de este jugador
 local modStreak = (function()
     local M = {
         Enabled = false, LockedNumber = nil, Applied = false,
@@ -3863,6 +3969,7 @@ local modStreak = (function()
     return M
 end)()
 
+-- Cursor personalizado (solo visual, se restaura al desactivar)
 local modCursor = (function()
     local M = {
         Applied = false, GunOnly = false, KnifeOnly = false,
@@ -3982,6 +4089,10 @@ return {
 }
 end
 
+-- ============================================================
+-- Cambio de nombre portado de clanxitado: reescribe los textos de la UI del juego
+-- (PlayerGui / CoreGui / Workspace). No modifica DisplayName de Humanoid.
+-- ============================================================
 local function setupNameChanger()
     local N = {
         Enabled = false, ForAll = false, CustomName = "xitado",
@@ -4067,7 +4178,7 @@ local function setupNameChanger()
                 pcall(function() scanNameContainer(container) end)
                 task.wait()
             end
-        
+            -- Workspace puede tener miles de objetos: se escanea aparte y mas tarde
             task.wait(1)
             pcall(function() scanNameContainer(Workspace) end)
         end)
@@ -4086,10 +4197,12 @@ NameChanger.Start()
 
 local Mod = setupMods()
 
+-- Construccion de UI en su propio scope (libera registers del chunk principal)
 local function buildUI()
 
-local uiRefs = {}
-
+-- ============================================================
+-- Mods / UI (sin opciones "Solo Yo")
+-- ============================================================
 local secModPlayer = TabMods:Section({ Title = T("SecPlayer"), Opened = true })
 table.insert(uiRefs, { el = secModPlayer, key = "SecPlayer", kind = "section" })
 
@@ -4419,38 +4532,15 @@ local btnApply = secMenu:Button({
         LANG = pendingLang
         if getgenv then getgenv().XitadoLang = LANG end
 
-        local newPack = Locale[LANG] or Locale.en
-        local remap = {}
-        for _, pack in pairs(Locale) do
-            for k, oldVal in pairs(pack) do
-                local newVal = newPack[k]
-                if newVal and tostring(oldVal) ~= tostring(newVal) then
-                    remap[tostring(oldVal)] = tostring(newVal)
-                end
-            end
-        end
-
-        local function patch(root)
-            if not root then return end
-            for _, d in ipairs(root:GetDescendants()) do
-                pcall(function()
-                    if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-                        local t = d.Text
-                        if t and remap[t] then d.Text = remap[t] end
-                    end
-                end)
-            end
-        end
-
-        local targets = { game:GetService("CoreGui") }
-        if gethui then pcall(function() table.insert(targets, gethui()) end) end
-        local pg = player:FindFirstChild("PlayerGui")
-        if pg then table.insert(targets, pg) end
-        for _, r in ipairs(targets) do patch(r) end
-
         for _, ref in ipairs(uiRefs) do
             pcall(function()
-                if ref.el and ref.el.SetTitle then ref.el:SetTitle(T(ref.key)) end
+                if not ref.el then return end
+                local text = T(ref.key)
+                if ref.kind == "tab" or ref.el.__type == "Tab" then
+                    setTabTitle(ref.el, text)
+                elseif ref.el.SetTitle then
+                    ref.el:SetTitle(text)
+                end
             end)
         end
 
@@ -4515,6 +4605,7 @@ end
 end
 
 buildUI()
+selectMainTab() -- asegurar Main abierta despues de construir los elementos
 
 local function onHubDestroy()
     destroyed = true
