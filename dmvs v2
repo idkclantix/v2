@@ -2332,65 +2332,6 @@ end
 
 local flyState = { Enabled = false, Speed = 40, Conn = nil }
 local isTouchFly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local flyTouch = { Gui = nil, Button = nil, Holding = false, JumpConn = nil, JumpUntil = 0 }
-
-local function flyGuiParent()
-    if gethui then local ok, h = pcall(gethui); if ok and h then return h end end
-    return CoreGui
-end
-
-local function destroyFlyTouchControl()
-    flyTouch.Holding = false
-    flyTouch.JumpUntil = 0
-    if flyTouch.JumpConn then pcall(function() flyTouch.JumpConn:Disconnect() end); flyTouch.JumpConn = nil end
-    if flyTouch.Gui then pcall(function() flyTouch.Gui:Destroy() end); flyTouch.Gui = nil; flyTouch.Button = nil end
-end
-
-local function ensureFlyTouchControl()
-    if flyTouch.Gui and flyTouch.Gui.Parent then return end
-    destroyFlyTouchControl()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "XitadoHubFlyTouch"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 2147483647
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    local btn = Instance.new("TextButton")
-    btn.Name = "XitadoFlyUpBtn"
-    btn.AnchorPoint = Vector2.new(1, 1)
-    btn.Position = UDim2.new(1, -24, 1, -150)
-    btn.Size = UDim2.fromOffset(90, 64)
-    btn.BackgroundColor3 = Color3.fromRGB(10, 10, 16)
-    btn.BackgroundTransparency = 0.2
-    btn.AutoButtonColor = false
-    btn.Text = "UP"
-    btn.TextColor3 = Color3.fromRGB(168, 199, 250)
-    btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 18
-    btn.ZIndex = 50
-    btn.Parent = gui
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Color = Color3.fromRGB(42, 42, 61)
-    stroke.Transparency = 0.5
-    stroke.Parent = btn
-    btn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            flyTouch.Holding = true
-        end
-    end)
-    btn.InputEnded:Connect(function()
-        flyTouch.Holding = false
-    end)
-    gui.Parent = flyGuiParent()
-    flyTouch.Gui = gui
-    flyTouch.Button = btn
-    flyTouch.JumpConn = UserInputService.JumpRequest:Connect(function()
-        if flyState.Enabled then flyTouch.JumpUntil = os.clock() + 0.3 end
-    end)
-end
 
 local function setCharacterCollisions(enabled)
     local character = player.Character
@@ -2402,7 +2343,6 @@ end
 
 local function stopFly()
     if flyState.Conn then flyState.Conn:Disconnect(); flyState.Conn = nil end
-    destroyFlyTouchControl()
     local character = player.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -2421,7 +2361,6 @@ local function setFly(on)
     if not on then stopFly(); refreshButtons(); return end
     stopFly()
     setCharacterCollisions(false)
-    if isTouchFly then ensureFlyTouchControl() end
     flyState.Conn = RunService.Heartbeat:Connect(function()
         if not flyState.Enabled then return end
         local character = player.Character
@@ -2444,11 +2383,17 @@ local function setFly(on)
         local right = cam.CFrame.RightVector
         local dir = Vector3.zero
         if isTouchFly then
+            -- Proyectamos el joystick sobre los ejes de la camara y volvemos
+            -- a aplicar LookVector CON la inclinacion: mirar arriba y avanzar
+            -- sube; mirar abajo y avanzar baja. Sin botones de UP/DN.
             local md = humanoid.MoveDirection
-            dir = Vector3.new(md.X, 0, md.Z)
-            if flyTouch.Holding or os.clock() < flyTouch.JumpUntil then
-                dir = dir + Vector3.new(0, 1, 0)
-            end
+            local flatLook = Vector3.new(look.X, 0, look.Z)
+            if flatLook.Magnitude < 0.001 then flatLook = Vector3.new(0, 0, -1) end
+            flatLook = flatLook.Unit
+            local flatRight = Vector3.new(right.X, 0, right.Z)
+            if flatRight.Magnitude < 0.001 then flatRight = Vector3.new(1, 0, 0) end
+            flatRight = flatRight.Unit
+            dir = look * md:Dot(flatLook) + right * md:Dot(flatRight)
         else
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + look end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - look end
