@@ -64,12 +64,12 @@ local Locale = {
         Skybox="Enable Sky", Sky="Sky", Language="Language", Apply="Apply",
         SecPosition="Position", SecBotones="Buttons", LockPosition="Lock Position",
         BtnAutoShot="AutoShot", BtnSilent="Silent", BtnAura="Knife Aura", BtnInv="Invisible",
-        BtnCam="CamLock", BtnFly="Fly", BtnBajar="Down / Up", BtnEsp="ESP",
+        BtnFly="Fly", BtnBajar="Down / Up", BtnEsp="ESP", BtnAutoKill="Auto Kill", BtnAimbot="Aimbot", BtnHitbox="Hitbox",
         SecAutoShot="AutoShot", AutoShot="Auto Shot", AutoEquip="Auto Equip", Target="Target",
         Head="Head", Torso="Torso", FullBody="Full Body",
         SecSilentAim="Silent Aim", SilentAim="Silent Aim",
         SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Invisible Hitbox",
-        SecLegit="Legit", Macro="Macro", TriggerBot="TriggerBot", CamLock="CamLock",
+        SecLegit="Legit", Macro="Macro", TriggerBot="TriggerBot", Aimbot="Aimbot",
         NotifyLang="Language applied.",
     },
     es = {
@@ -96,12 +96,12 @@ local Locale = {
         Skybox="Activar Cielo", Sky="Cielo", Language="Idioma", Apply="Aplicar",
         SecPosition="Posición", SecBotones="Botones", LockPosition="Bloquear Posición",
         BtnAutoShot="Disparo Automático", BtnSilent="Apuntado Silencioso", BtnAura="Aura Cuchillo", BtnInv="Invisible",
-        BtnCam="Bloqueo de Cámara", BtnFly="Volar", BtnBajar="Bajar / Subir", BtnEsp="ESP",
+        BtnFly="Volar", BtnBajar="Bajar / Subir", BtnEsp="ESP", BtnAutoKill="Auto Kill", BtnAimbot="Aimbot", BtnHitbox="Hitbox",
         SecAutoShot="Disparo Automático", AutoShot="Disparo Automático", AutoEquip="Equipar Automático", Target="Objetivo",
         Head="Cabeza", Torso="Torso", FullBody="Cuerpo Completo",
         SecSilentAim="Apuntado Silencioso", SilentAim="Apuntado Silencioso",
         SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Hitbox Invisible",
-        SecLegit="Legit", Macro="Macro", TriggerBot="Disparador Automático", CamLock="Bloqueo de Cámara",
+        SecLegit="Legit", Macro="Macro", TriggerBot="Disparador Automático", Aimbot="Aimbot",
         NotifyLang="Idioma aplicado.",
     },
 }
@@ -363,9 +363,11 @@ selectMainTab()
 local autoShootEnabled, autoEquipEnabled, silentAimEnabled, silentEquipEnabled
 local espEnemy, espAlly, auraRemote, auraEnabled, AURA_ARG
 local hitboxState, clearGhostHitboxes, limpiarAgresivoHitboxes
-local legitTriggerEnabled, legitMacroEnabled, camlockEnabled, camlockTarget
-local camlockGunOnly, camlockKnifeOnly, legitConns, macroTouch, camlockPuedeActivar
-local isEnemy, esCompaneroDeEquipo, esPistola, esCuchillo, oldNamecallHook
+local legitTriggerEnabled, legitMacroEnabled
+local aimbotState, setAimbot, aimbotGunOnly, aimbotKnifeOnly -- Aimbot fuerte (celular y PC)
+local autoKillState, activeESPs, buttonOrder -- compartidos con el aimbot interno de Auto Kill
+local legitConns, macroTouch
+local isEnemy, esCompaneroDeEquipo, esPistola, esCuchillo, oldNamecallHook, esEnemigoValido, obtenerPistola, estaEnLobby
 local invisState, setInvisible
 local autoEventFarm
 
@@ -595,7 +597,7 @@ esCompaneroDeEquipo = function(targetPlayer)
     return isAlly(targetPlayer)
 end
 
-local function estaEnLobby()
+estaEnLobby = function()
     local char = player.Character
     if not char then return true end
     if char:FindFirstChildOfClass("ForceField") then return true end
@@ -625,7 +627,7 @@ local function IsInMatchStrict()
     return txt:match("^%d+:%d%d$") ~= nil
 end
 
-local function esEnemigoValido(targetPlayer)
+esEnemigoValido = function(targetPlayer)
     if not targetPlayer or targetPlayer == player then return false end
     if not isEnemy(targetPlayer) then return false end
     local char = targetPlayer.Character
@@ -669,7 +671,7 @@ esPistola = function(item)
     return true
 end
 
-local function obtenerPistola()
+obtenerPistola = function()
     local char = player.Character
     if not char then return nil end
     local backpack = player:FindFirstChildOfClass("Backpack")
@@ -933,25 +935,9 @@ local macroLastClickTime = 0
 local MACRO_CLICK_DEDUPE = 0.25 -- un tap genera Touch y MouseButton1: solo un disparo real
 legitConns = {}
 
-camlockEnabled = false
-camlockTarget = nil
-camlockGunOnly = false
-camlockKnifeOnly = false
+aimbotGunOnly = false
+aimbotKnifeOnly = false
 local legitToggles = {}
-
-camlockPuedeActivar = function()
-    if not camlockEnabled then return false end
-    local char = player.Character
-    local tool = char and char:FindFirstChildOfClass("Tool")
-    if camlockGunOnly and camlockKnifeOnly then
-        return tool ~= nil and (esPistola(tool) or esCuchillo(tool))
-    elseif camlockGunOnly then
-        return tool ~= nil and esPistola(tool)
-    elseif camlockKnifeOnly then
-        return tool ~= nil and esCuchillo(tool)
-    end
-    return true
-end
 
 local TRIGGER_DELAY = 0.02
 local TRIGGER_COOLDOWN = 0.18
@@ -1020,6 +1006,24 @@ task.spawn(function()
     end
 end)
 
+--OBJETIVO BAJO EL CLICK: para que el disparo vaya donde tocaste (mobile) y no al centro de la camara.
+local macroRayParams = RaycastParams.new()
+macroRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function macroAimAtClick(screenPos)
+    if not screenPos then return nil end
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+    macroRayParams.FilterDescendantsInstances = { player.Character }
+    local ray = cam:ViewportPointToRay(screenPos.X, screenPos.Y, 0)
+    local hit = workspace:Raycast(ray.Origin, ray.Direction * 900, macroRayParams)
+    if not hit or not hit.Instance or not hit.Instance:IsA("BasePart") then return nil end
+    local model = hit.Instance:FindFirstAncestorOfClass("Model")
+    local plr = model and Players:GetPlayerFromCharacter(model)
+    if not plr or not esEnemigoValido(plr) then return nil end
+    return hit.Instance
+end
+
 local function macroCanRun()
     if not legitMacroEnabled or macroBusy or not IsInMatchStrict() then return false end
     local char = player.Character
@@ -1028,8 +1032,8 @@ local function macroCanRun()
     return true
 end
 
--- Macro: al picar SOLO saca el arma. No dispara y no la guarda.
-local function runLegitMacro()
+-- Macro: al picar saca el arma, dispara hacia donde hiciste click y la guarda.
+local function runLegitMacro(screenPos)
     if not macroCanRun() then return end
     local nowClick = os.clock()
     if nowClick - macroLastClickTime < MACRO_CLICK_DEDUPE then return end
@@ -1039,8 +1043,28 @@ local function runLegitMacro()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if char and hum and hum.Health > 0 then
         local gun = obtenerPistola()
-        if gun and gun.Parent ~= char then
-            pcall(function() hum:EquipTool(gun) end)
+        if gun then
+            local clickPart = macroAimAtClick(screenPos)
+            local prevTarget = getgenv and getgenv().XitadoHubTargetPart or nil
+            local equipOk = true
+            if gun.Parent ~= char then
+                equipOk = pcall(function() hum:EquipTool(gun) end) and waitToolEquipped(gun, hum, EQUIP_TIMEOUT)
+            end
+            if equipOk then
+                task.wait(SHOOT_SETTLE)
+                if clickPart and clickPart.Parent then
+                    if getgenv then getgenv().XitadoHubTargetPart = clickPart end
+                end
+                shootOnce(player.Character, hum)
+                if clickPart then
+                    task.wait(0.02)
+                    if getgenv then getgenv().XitadoHubTargetPart = prevTarget end
+                end
+                task.wait(EQUIP_HOLD_TIME)
+                local humNow = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+                if humNow then pcall(function() humNow:UnequipTools() end) end
+                task.wait(EQUIP_STOW_TIME)
+            end
         end
     end
     macroBusy = false
@@ -1049,7 +1073,7 @@ end
 table.insert(legitConns, UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or not legitMacroEnabled or not macroCanRun() then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        task.spawn(runLegitMacro)
+        task.spawn(runLegitMacro, UserInputService:GetMouseLocation())
     elseif input.UserInputType == Enum.UserInputType.Touch then
         local cam = Workspace.CurrentCamera
         local width = cam and cam.ViewportSize.X or 0
@@ -1087,7 +1111,9 @@ table.insert(legitConns, UserInputService.InputEnded:Connect(function(input)
     -- Solo cuenta como click real: toque corto, sin arrastrar (mantener para apuntar no dispara)
     local isRealClick = wasActive and not wasDrag
         and startTime ~= nil and (os.clock() - startTime) <= macroTouch.MaxTapTime
-    if isRealClick then task.spawn(runLegitMacro) end
+    if isRealClick then
+        task.spawn(runLegitMacro, Vector2.new(input.Position.X, input.Position.Y))
+    end
 end))
 
 table.insert(legitConns, UserInputService.WindowFocusReleased:Connect(function()
@@ -1324,22 +1350,21 @@ UIElements.TogTriggerBot = regUI(TabMain:Toggle({
     Callback = function(Value) legitTriggerEnabled = Value end,
 }), "TriggerBot")
 
-UIElements.TogCamLock = regUI(TabMain:Toggle({
-    Title = T("CamLock"),
+UIElements.TogAimbot = regUI(TabMain:Toggle({
+    Title = T("Aimbot"),
     Value = false,
     Callback = function(Value)
-        camlockEnabled = Value
-        if not Value then camlockTarget = nil end
+        if setAimbot then setAimbot(Value) end
     end,
-}), "CamLock")
+}), "Aimbot")
 
 UIElements.TogGunOnly = regUI(TabMain:Toggle({
     Title = T("GunOnly"),
     Value = false,
     Callback = function(Value)
-        camlockGunOnly = Value
-        if Value and camlockKnifeOnly then
-            camlockKnifeOnly = false
+        aimbotGunOnly = Value
+        if Value and aimbotKnifeOnly then
+            aimbotKnifeOnly = false
             local other = legitToggles.KnifeOnly
             if other and other.Set then pcall(function() other:Set(false) end) end
         end
@@ -1350,9 +1375,9 @@ UIElements.TogKnifeOnly = regUI(TabMain:Toggle({
     Title = T("KnifeOnly"),
     Value = false,
     Callback = function(Value)
-        camlockKnifeOnly = Value
-        if Value and camlockGunOnly then
-            camlockGunOnly = false
+        aimbotKnifeOnly = Value
+        if Value and aimbotGunOnly then
+            aimbotGunOnly = false
             local other = legitToggles.GunOnly
             if other and other.Set then pcall(function() other:Set(false) end) end
         end
@@ -1694,9 +1719,130 @@ end
 
 setupCombat()
 
+-- ============================================================
+-- AIMBOT FUERTE (celular y PC)
+-- Lock de camara directo al TORSO del enemigo en RenderStepped,
+-- sin limite de FOV y con correccion casi instantanea. Tambien
+-- fija XitadoHubTargetPart para que el disparo vaya al mismo punto.
+-- ============================================================
+aimbotState = { Enabled = false, Target = nil }
+local AIMBOT_MAX_DIST = 2000
+local AIMBOT_SNAP     = 0.75 -- 0..1: fuerza de correccion por frame (1 = snap total)
+local AIMBOT_PREDICT  = 0.08
+local aimbotRayParams = RaycastParams.new()
+aimbotRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function aimbotVisible(from, part, myChar)
+    if not part or not part.Parent then return false end
+    local enemyChar = part:FindFirstAncestorOfClass("Model") or part.Parent
+    aimbotRayParams.FilterDescendantsInstances = { myChar, enemyChar }
+    local hit = workspace:Raycast(from, part.Position - from, aimbotRayParams)
+    return not hit or (hit.Instance and hit.Instance:IsDescendantOf(enemyChar))
+end
+
+local function aimbotPickTarget()
+    local myChar = player.Character
+    local root = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local cam = workspace.CurrentCamera
+    if not root or not cam then return nil end
+    local head = myChar:FindFirstChild("Head") or root
+    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    local best, bestScore = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        -- si el enemigo no tiene ESP, el aimbot no lo cuenta
+        if p ~= player and activeESPs[p] and esEnemigoValido(p) and p.Character then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local torso = p.Character:FindFirstChild("UpperTorso") or p.Character:FindFirstChild("Torso")
+                local headPart = p.Character:FindFirstChild("Head")
+                local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                for _, part in ipairs({ torso, headPart, hrp }) do
+                    if part and part:IsA("BasePart") then
+                        local dist = (part.Position - root.Position).Magnitude
+                        if dist <= AIMBOT_MAX_DIST then
+                            local sp, onScreen = cam:WorldToViewportPoint(part.Position)
+                            local screenDist = 500 -- penalidad si esta fuera de pantalla
+                            if onScreen and sp.Z > 0 then
+                                screenDist = (center - Vector2.new(sp.X, sp.Y)).Magnitude
+                            end
+                            -- prioridad torso, luego cercania al centro, luego distancia
+                            local score = screenDist + dist * 0.05 - (part == torso and 250 or 0)
+                            if score < bestScore and aimbotVisible(head.Position, part, myChar) then
+                                bestScore = score
+                                best = part
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+setAimbot = function(on)
+    on = on == true
+    if aimbotState.Enabled == on then return end
+    aimbotState.Enabled = on
+    if not on then
+        aimbotState.Target = nil
+        if getgenv then getgenv().XitadoHubTargetPart = nil end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if destroyed then return end
+    local internalKill = autoKillState and autoKillState.Enabled
+    if not aimbotState.Enabled and not internalKill then return end
+    if estaEnLobby() then
+        aimbotState.Target = nil
+        return
+    end
+    -- Gun Only / Knife Only aplican al Aimbot del hub (el interno de Auto Kill no)
+    if aimbotState.Enabled then
+        local myChar = player.Character
+        local tool = myChar and myChar:FindFirstChildOfClass("Tool")
+        if aimbotGunOnly and aimbotKnifeOnly then
+            if not tool or not (esPistola(tool) or esCuchillo(tool)) then aimbotState.Target = nil; return end
+        elseif aimbotGunOnly then
+            if not tool or not esPistola(tool) then aimbotState.Target = nil; return end
+        elseif aimbotKnifeOnly then
+            if not tool or not esCuchillo(tool) then aimbotState.Target = nil; return end
+        end
+    end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local target = nil
+    if internalKill then
+        -- Aimbot interno: SOLO el enemigo del teletransporte, y solo si tiene ESP.
+        local killTarget = autoKillState.Target
+        if killTarget and killTarget.Character and activeESPs[killTarget] then
+            local kc = killTarget.Character
+            target = kc:FindFirstChild("UpperTorso") or kc:FindFirstChild("Torso")
+                or kc:FindFirstChild("Head") or kc:FindFirstChild("HumanoidRootPart")
+        end
+        if not target then return end
+    else
+        target = aimbotState.Target
+        if not (target and target.Parent and target:IsA("BasePart")) then
+            target = aimbotPickTarget()
+            aimbotState.Target = target
+        end
+        if not target then return end
+    end
+    local vel = target.AssemblyLinearVelocity
+    if vel.Magnitude > 150 then vel = vel.Unit * 150 end
+    local predicted = target.Position + vel * AIMBOT_PREDICT
+    local targetCF = CFrame.lookAt(cam.CFrame.Position, predicted)
+    pcall(function()
+        cam.CFrame = cam.CFrame:Lerp(targetCF, AIMBOT_SNAP)
+    end)
+    if getgenv then getgenv().XitadoHubTargetPart = target end
+end)
+
 -- ESP: highlight, linea, nombre y distancia para enemigos y aliados
-local activeESPs     = {}
-local MAX_ESP_DISTANCE = 4000
+activeESPs           = {}
+local MAX_ESP_DISTANCE = 25000
 local espConnection  = nil
 local espRemoveConn  = nil
 local espFolder      = Instance.new("Folder")
@@ -2464,84 +2610,6 @@ local function setFly(on)
     refreshButtons()
 end
 
-local CAMLOCK_PREDICTION = 0.18
-local CAMLOCK_MAX_DIST = 900
-local CAMLOCK_FOV_PX = 260
-local CAMLOCK_LERP = 0.10
-local camlockLastFrame = os.clock()
-local camlockRayParams = RaycastParams.new()
-camlockRayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local function camlockVisible(from, part, myChar)
-    if not part or not part.Parent then return false end
-    local enemyChar = part:FindFirstAncestorOfClass("Model") or part.Parent
-    camlockRayParams.FilterDescendantsInstances = { myChar, enemyChar }
-    local hit = Workspace:Raycast(from, part.Position - from, camlockRayParams)
-    if not hit then return true end
-    return hit.Instance and hit.Instance:IsDescendantOf(enemyChar)
-end
-
-local function findCamlockTarget()
-    local myChar = player.Character
-    if not myChar then return nil end
-    local myHead = myChar:FindFirstChild("Head") or myChar:FindFirstChild("HumanoidRootPart")
-    local cam = Workspace.CurrentCamera
-    if not myHead or not cam then return nil end
-    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-    local bestPart, bestScore = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and isEnemy(p) and p.Character then
-            local char = p.Character
-            local part = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-                or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
-            if part and part:IsA("BasePart") then
-                local dist = (part.Position - myHead.Position).Magnitude
-                if dist <= CAMLOCK_MAX_DIST then
-                    local pos2d, onScreen = cam:WorldToViewportPoint(part.Position)
-                    if onScreen and pos2d.Z > 0 then
-                        local screenDist = (center - Vector2.new(pos2d.X, pos2d.Y)).Magnitude
-                        if screenDist <= CAMLOCK_FOV_PX and camlockVisible(myHead.Position, part, myChar) then
-                            local score = screenDist + dist * 0.05
-                            if score < bestScore then bestScore = score; bestPart = part end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return bestPart
-end
-
-RunService.RenderStepped:Connect(function()
-    local now = os.clock()
-    local dt = math.clamp(now - camlockLastFrame, 0, 1 / 20)
-    camlockLastFrame = now
-    if not camlockPuedeActivar() then camlockTarget = nil; return end
-    local cam = Workspace.CurrentCamera
-    local myChar = player.Character
-    local myHead = myChar and (myChar:FindFirstChild("Head") or myChar:FindFirstChild("HumanoidRootPart"))
-    if not cam or not myHead then camlockTarget = nil; return end
-    local needNew = not (camlockTarget and camlockTarget.Parent)
-    if not needNew then
-        local enemyChar = camlockTarget:FindFirstAncestorOfClass("Model")
-        local enemyPlayer = enemyChar and Players:GetPlayerFromCharacter(enemyChar)
-        local sp, onScreen = cam:WorldToViewportPoint(camlockTarget.Position)
-        if not enemyPlayer or not isEnemy(enemyPlayer) or not onScreen or sp.Z <= 0
-            or (camlockTarget.Position - myHead.Position).Magnitude > CAMLOCK_MAX_DIST
-            or not camlockVisible(myHead.Position, camlockTarget, myChar) then needNew = true end
-    end
-    if needNew then camlockTarget = findCamlockTarget() end
-    if camlockTarget and camlockTarget.Parent then
-        local vel = camlockTarget.AssemblyLinearVelocity
-        if vel.Magnitude > 120 then vel = vel.Unit * 120 end
-        local predicted = camlockTarget.Position + vel * CAMLOCK_PREDICTION
-        local currentCF = cam.CFrame
-        local targetCF = CFrame.lookAt(currentCF.Position, predicted)
-        local alpha = 1 - math.exp(-CAMLOCK_LERP * 60 * dt)
-        cam.CFrame = currentCF:Lerp(targetCF, math.clamp(alpha, 0, 0.35))
-    end
-end)
-
 local bajarState = { Enabled = false, Floor = nil, ActivationPos = nil }
 local function destroyBajarFloor()
     if bajarState.Floor and bajarState.Floor.Parent then pcall(function() bajarState.Floor:Destroy() end) end
@@ -2591,7 +2659,7 @@ invisState = {
     MirrorParams = nil, GroundOffset = nil, SmoothY = nil,
 }
 local invisPassChanged = setmetatable({}, { __mode = "k" })
-local INVIS_ALTITUDE = 4000
+local INVIS_ALTITUDE = 25000
 local GROUP_INVISIBLE, GROUP_OTHERS = "XitadoInvisible", "XitadoOthers"
 local groupsReady = false
 
@@ -2872,6 +2940,233 @@ end
 
 setupInvisibility()
 
+-- ============================================================
+-- AUTO KILL = TELEKILL de 01ROXHUB (autocontenido)
+-- Logica identica al toggle "TELEKILL [SOLO ARMA]":
+--  1) teletransportarse detras del enemigo (LoopAtrasSolo)
+--  2) siempre tener el arma equipada mientras esta activo (altoFire)
+--  3) ALTO FIRE [AGRESIVO]: barrer partes visibles y Activate()/Deactivate()
+-- El hook de silent aim del hub redirige el raycast a XitadoHubTargetPart.
+-- Reutiliza el teamcheck del hub (esEnemigoValido / estaEnLobby).
+-- ============================================================
+autoKillState = { Enabled = false, Threads = {}, Target = nil, EquippedAt = 0 }
+local AUTO_KILL_BEHIND = 6
+local AUTO_KILL_RANGE = 200
+
+-- Lobby robusto: ForceField/nombre de equipo + scoreboard (como 01rox).
+-- Si el scoreboard existe y el local no esta en TeamRed/TeamBlue, estamos en lobby.
+local function autoKillIsLobby()
+    if estaEnLobby() then return true end
+    local pg = player:FindFirstChild("PlayerGui")
+    local score = pg and pg:FindFirstChild("IngameScore", true)
+    if not score then return false end
+    local red = score:FindFirstChild("TeamRed")
+    local blue = score:FindFirstChild("TeamBlue")
+    if not red and not blue then return true end
+    local myName = string.lower(player.Name)
+    local myDisplay = player.DisplayName and string.lower(player.DisplayName) or myName
+    for _, folder in ipairs({ red, blue }) do
+        if folder then
+            for _, e in ipairs(folder:GetChildren()) do
+                local n = string.lower(e.Name)
+                if n == myName or n == myDisplay then return false end
+            end
+        end
+    end
+    return true
+end
+
+local function autoKillAddThread(fn)
+    local t = task.spawn(fn)
+    table.insert(autoKillState.Threads, t)
+    return t
+end
+
+local function autoKillStopThreads()
+    for _, t in ipairs(autoKillState.Threads) do pcall(task.cancel, t) end
+    table.clear(autoKillState.Threads)
+end
+
+local function autoKillNearestEnemy()
+    local char = player.Character
+    local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+    if not myRoot or autoKillIsLobby() then return nil end
+    local nearest, nearestDist = nil, AUTO_KILL_RANGE
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and esEnemigoValido(p) and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local d = (myRoot.Position - root.Position).Magnitude
+                if d < nearestDist then nearestDist = d; nearest = p end
+            end
+        end
+    end
+    return nearest
+end
+
+-- 1) Teletransporte detras del enemigo (LoopAtrasSolo de 01rox)
+local function autoKillTeleportLoop()
+    while autoKillState.Enabled and not destroyed do
+        local char = player.Character
+        local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+        if autoKillIsLobby() or not myRoot then
+            autoKillState.Target = nil
+            if getgenv then getgenv().XitadoHubTargetPart = nil end
+            task.wait(0.3)
+        else
+            local target = autoKillNearestEnemy()
+            if target and target.Character then
+                local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                local tHum = target.Character:FindFirstChildOfClass("Humanoid")
+                if tRoot and tHum and tHum.Health > 0 then
+                    local behind = tRoot.CFrame * CFrame.new(0, 0, AUTO_KILL_BEHIND)
+                    pcall(function()
+                        myRoot.CFrame = CFrame.lookAt(behind.Position, tRoot.Position)
+                        myRoot.AssemblyLinearVelocity = Vector3.zero
+                        myRoot.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                    -- Comparte el enemigo con el loop de disparo. NO escribir
+                    -- XitadoHubTargetPart aca: antes se pisaba cada frame con
+                    -- otra parte/enemigo y el primer tiro salia de costado.
+                    autoKillState.Target = target
+                end
+            else
+                autoKillState.Target = nil
+                if getgenv then getgenv().XitadoHubTargetPart = nil end
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end
+end
+
+-- 2) Siempre tener el arma equipada mientras Auto Kill esta activo
+local function autoKillEquipLoop()
+    while autoKillState.Enabled and not destroyed do
+        task.wait(0.2)
+        if autoKillIsLobby() then continue end
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum then continue end
+        local equipped = char:FindFirstChildOfClass("Tool")
+        if equipped and esPistola(equipped) then continue end -- ya tiene arma
+        local gun = obtenerPistola()
+        if gun and gun.Parent ~= char then
+            if pcall(function() hum:EquipTool(gun) end) then
+                autoKillState.EquippedAt = os.clock() -- no disparar durante la transicion de equip
+            end
+        end
+    end
+end
+
+-- 3) ALTO FIRE [AGRESIVO] de 01rox: barre partes visibles y dispara.
+local function autoKillFireLoop()
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    while autoKillState.Enabled and not destroyed do
+        task.wait(0.1)
+        if autoKillIsLobby() then
+            if getgenv then getgenv().XitadoHubTargetPart = nil end
+            continue
+        end
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+        local arma = char:FindFirstChildOfClass("Tool")
+        if not arma or not arma:FindFirstChild("Handle") or esCuchillo(arma) then
+            if getgenv then getgenv().XitadoHubTargetPart = nil end
+            continue
+        end
+        -- No disparar mientras el arma se esta equipando (el primer Activate
+        -- podia salir sin direccion valida: costados/arriba/abajo).
+        if os.clock() - autoKillState.EquippedAt < 0.15 then continue end
+
+        -- Un solo enemigo para TP y disparo: el que eligio el loop de teletransporte.
+        local target = autoKillState.Target
+        if not target or not target.Character or not esEnemigoValido(target) then
+            target = autoKillNearestEnemy()
+            autoKillState.Target = target
+        end
+        local closestPart, shortest = nil, math.huge
+        local closestTorso, torsoDist = nil, math.huge
+        if target and target.Character then
+            local enemyHum = target.Character:FindFirstChildOfClass("Humanoid")
+            if enemyHum and enemyHum.Health > 0 then
+                local myPos = char.HumanoidRootPart.Position
+                local headPos = char:FindFirstChild("Head") and char.Head.Position or myPos
+                params.FilterDescendantsInstances = { char, target.Character }
+                for _, part in ipairs(target.Character:GetChildren()) do
+                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                        local isTorso = part.Name == "UpperTorso" or part.Name == "Torso"
+                        local d = (part.Position - myPos).Magnitude
+                        if isTorso then
+                            if d >= torsoDist then continue end
+                        elseif d >= shortest then
+                            continue
+                        end
+                        local size = part.Size
+                        local offsets = { Vector3.zero, Vector3.new(0, size.Y / 2.1, 0), Vector3.new(0, -size.Y / 2.1, 0) }
+                        for _, off in ipairs(offsets) do
+                            if not workspace:Raycast(headPos, (part.CFrame * off) - headPos, params) then
+                                if isTorso then torsoDist = d; closestTorso = part
+                                else shortest = d; closestPart = part end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        closestPart = closestTorso or closestPart -- torso siempre tiene prioridad
+        if closestPart and closestPart.Parent then
+            local aimPart = closestPart
+            -- Fijar objetivo antes de disparar y alinear la camara: si el juego
+            -- no redirige el raycast, el tiro igual va al enemigo correcto.
+            if getgenv then getgenv().XitadoHubTargetPart = aimPart end
+            local cam = workspace.CurrentCamera
+            if cam then
+                pcall(function()
+                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, aimPart.Position)
+                end)
+            end
+            task.wait(0.03)
+            local gunNow = player.Character and player.Character:FindFirstChildOfClass("Tool")
+            if not gunNow or gunNow.Parent ~= player.Character then continue end
+            if getgenv then getgenv().XitadoHubTargetPart = aimPart end
+            local fireChar = player.Character
+            pcall(function()
+                gunNow:Activate()
+                task.delay(0.05, function()
+                    if gunNow.Parent == fireChar then gunNow:Deactivate() end
+                end)
+            end)
+            task.wait(0.2)
+        else
+            if getgenv then getgenv().XitadoHubTargetPart = nil end
+        end
+    end
+end
+
+local function setAutoKill(on)
+    on = on == true
+    if autoKillState.Enabled == on then return end
+    autoKillState.Enabled = on
+    pcall(function()
+        if Window and Window.Notify then Window:Notify(on and "Auto Kill: ON" or "Auto Kill: OFF") end
+    end)
+    if on then
+        autoKillStopThreads()
+        autoKillState.Target = nil
+        autoKillState.EquippedAt = os.clock()
+        -- El aimbot interno de Auto Kill no toca el toggle del Aimbot del hub.
+        autoKillAddThread(autoKillTeleportLoop)
+        autoKillAddThread(autoKillEquipLoop)
+        autoKillAddThread(autoKillFireLoop) -- ALTO FIRE [AGRESIVO]
+    else
+        autoKillStopThreads()
+        autoKillState.Target = nil
+        if getgenv then getgenv().XitadoHubTargetPart = nil end
+    end
+end
+
 local Feat = {}
 Feat.AutoShot = {
     get = function() return autoShootEnabled end,
@@ -2888,10 +3183,20 @@ Feat.SilentAim = {
     end,
 }
 Feat.Esp = { get = function() return espEnemy.Enabled end, set = function(v) espEnemy.Enabled = v == true end }
+Feat.Hitbox = {
+    get = function() return hitboxState.Enabled end,
+    set = function(v)
+        v = v == true
+        hitboxState.Enabled = v
+        if v then hitboxState.Transparency = 0.6 end
+        if not v then pcall(clearGhostHitboxes) end
+    end,
+}
 Feat.KnifeAura = { get = function() return auraState.Enabled end, set = function(v) setAura(v) end }
 Feat.Invisible = { get = function() return invisState.Enabled end, set = function(v) setInvisible(v) end }
-Feat.Camlock = { get = function() return camlockEnabled end, set = function(v) camlockEnabled = v; if not v then camlockTarget = nil end end }
+Feat.Aimbot = { get = function() return aimbotState and aimbotState.Enabled end, set = function(v) if setAimbot then setAimbot(v) end end }
 Feat.Fly = { get = function() return flyState.Enabled end, set = function(v) setFly(v) end }
+Feat.AutoKill = { get = function() return autoKillState.Enabled end, set = function(v) setAutoKill(v) end }
 Feat.Bajar = { get = function() return bajarState.Enabled end, set = function(v) if v then doBajar() else doSubir() end end }
 
 local function FeatSet(name, v)
@@ -2910,6 +3215,7 @@ end
 -- Botones flotantes: estilo del reference, con nombres Xitado y logica real
 local floatConns = {}
 buttons, buttonDefs = {}, {}
+buttonOrder = {}
 local pollConn, pollAcc = nil, 0
 local buttonsLocked = false
 local BUTTON_W, BUTTON_H, BUTTON_GAP, BUTTON_EDGE = 150, 45, 12, 24
@@ -2935,6 +3241,30 @@ local function getButtonLayout(side, order)
         return UDim2.new(0, BUTTON_EDGE, 0.5, y), Vector2.new(0, 0.5)
     end
     return UDim2.new(1, -BUTTON_EDGE, 0.5, y), Vector2.new(1, 0.5)
+end
+
+-- Zigzag: el primer boton visible a la izquierda, el siguiente a la derecha,
+-- el tercero a la izquierda... segun el orden en que se fueron prendiendo.
+local function layoutVisibleButtons()
+    local leftCount, rightCount = 0, 0
+    for i, id in ipairs(buttonOrder) do
+        local fb, def = buttons[id], buttonDefs[id]
+        if def and fb and fb.Button and fb.Button.Parent and fb.Button.Visible then
+            local side = (i % 2 == 1) and "left" or "right"
+            local idx
+            if side == "left" then
+                leftCount = leftCount + 1; idx = leftCount
+            else
+                rightCount = rightCount + 1; idx = rightCount
+            end
+            def.side, def.order = side, idx
+            local pos, anchor = getButtonLayout(side, idx)
+            pcall(function()
+                fb.Button.AnchorPoint = anchor
+                fb.Button.Position = pos
+            end)
+        end
+    end
 end
 
 local function setButtonState(fb, label, state)
@@ -3036,6 +3366,12 @@ local function SetButtonVisible(id, on)
         refreshButtons()
     end
     if fb and fb.Button then fb.Button.Visible = on end
+    -- Actualiza el orden de activacion y reubica en zigzag
+    for i = #buttonOrder, 1, -1 do
+        if buttonOrder[i] == id then table.remove(buttonOrder, i) end
+    end
+    if on then table.insert(buttonOrder, id) end
+    layoutVisibleButtons()
     local anyVisible = false
     for _, b in pairs(buttons) do
         if b.Button and b.Button.Parent and b.Button.Visible then anyVisible = true end
@@ -3071,6 +3407,7 @@ local function CleanupButtons()
         pcall(function() if fb.Button then fb.Button:Destroy() end end)
         buttons[id] = nil
     end
+    table.clear(buttonOrder)
     if floatGui then pcall(function() floatGui:Destroy() end); floatGui = nil end
 end
 
@@ -3085,11 +3422,13 @@ buttonDefs.AutoShot = visualDef("BtnAutoShot", "right", 1, "AutoShot")
 buttonDefs.SilentAim = visualDef("BtnSilent", "right", 2, "SilentAim")
 buttonDefs.Invisible = visualDef("BtnInv", "right", 3, "Invisible")
 buttonDefs.Fly = visualDef("BtnFly", "right", 4, "Fly")
+buttonDefs.AutoKill = visualDef("BtnAutoKill", "right", 5, "AutoKill")
+buttonDefs.Aimbot = visualDef("BtnAimbot", "right", 6, "Aimbot")
+buttonDefs.Hitbox = visualDef("BtnHitbox", "right", 7, "Hitbox")
 buttonDefs.Esp = visualDef("BtnEsp", "left", 1, "Esp")
 buttonDefs.KnifeAura = visualDef("BtnAura", "left", 2, "KnifeAura")
-buttonDefs.Camlock = visualDef("BtnCam", "left", 3, "Camlock")
 buttonDefs.Bajar = {
-    key = "BtnBajar", text = T("BtnBajar"), side = "left", order = 4,
+    key = "BtnBajar", text = T("BtnBajar"), side = "left", order = 3,
     isOn = function() return bajarState.Enabled end,
     onClick = function()
         if bajarState.Enabled then doSubir() else doBajar() end
@@ -4220,10 +4559,10 @@ end })
 table.insert(uiRefs, { el = togModFly, key = "Fly", kind = "toggle" })
 
 local inpFlySpeed = secModPlayer:Input({
-    Title = T("Speed"), Placeholder = "40 (0-45)", Value = "40",
+    Title = T("Speed"), Placeholder = "40 (sin limite)", Value = "40",
     Callback = function(text)
         local n = tonumber(text)
-        if n then flyState.Speed = math.clamp(n, 0, 45) end
+        if n then flyState.Speed = n end -- sin limite de velocidad
     end,
 })
 table.insert(uiRefs, { el = inpFlySpeed, key = "Speed", kind = "input" })
@@ -4563,8 +4902,10 @@ addBtnToggle("BtnEsp", "Esp")
 addBtnToggle("BtnSilent", "SilentAim")
 addBtnToggle("BtnAura", "KnifeAura")
 addBtnToggle("BtnInv", "Invisible")
-addBtnToggle("BtnCam", "Camlock")
 addBtnToggle("BtnFly", "Fly")
+addBtnToggle("BtnAutoKill", "AutoKill")
+addBtnToggle("BtnAimbot", "Aimbot")
+addBtnToggle("BtnHitbox", "Hitbox")
 addBtnToggle("BtnBajar", "Bajar")
 
 for _, pack in ipairs(AnimPacks) do
@@ -4614,8 +4955,8 @@ local function onHubDestroy()
         hitboxState.Enabled = false
         legitTriggerEnabled = false
         legitMacroEnabled = false
-        camlockGunOnly = false
-        camlockKnifeOnly = false
+        aimbotGunOnly = false
+        aimbotKnifeOnly = false
         for _, c in ipairs(legitConns) do pcall(function() c:Disconnect() end) end
         table.clear(legitConns)
         table.clear(macroTouch.Active)
@@ -4637,7 +4978,8 @@ local function onHubDestroy()
 
     pcall(function() setAura(false) end)
     pcall(function() setFly(false) end)
-    pcall(function() camlockEnabled = false; camlockTarget = nil end)
+    pcall(function() setAutoKill(false) end)
+    pcall(function() if setAimbot then setAimbot(false) end end)
     pcall(function() setInvisible(false) end)
     pcall(function() if bajarState.Enabled then doSubir() end end)
     pcall(CleanupButtons)
