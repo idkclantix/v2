@@ -1823,8 +1823,22 @@ RunService.RenderStepped:Connect(function()
         end
         if not target then return end
     else
+        -- Aimbot del toggle: SOLO enemigos con ESP y con linea de vision despejada.
+        -- Se revalida cada frame; si se tapa, muere o pierde ESP, se suelta y busca otro.
         target = aimbotState.Target
-        if not (target and target.Parent and target:IsA("BasePart")) then
+        local sigueValido = false
+        if target and target.Parent and target:IsA("BasePart") then
+            local tChar = target:FindFirstAncestorOfClass("Model")
+            local tPlayer = tChar and Players:GetPlayerFromCharacter(tChar)
+            local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+            local myCharNow = player.Character
+            local desde = myCharNow and (myCharNow:FindFirstChild("Head") or myCharNow:FindFirstChild("HumanoidRootPart"))
+            if tPlayer and tPlayer ~= player and activeESPs[tPlayer] and esEnemigoValido(tPlayer)
+                and tHum and tHum.Health > 0 and desde then
+                sigueValido = aimbotVisible(desde.Position, target, myCharNow)
+            end
+        end
+        if not sigueValido then
             target = aimbotPickTarget()
             aimbotState.Target = target
         end
