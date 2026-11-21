@@ -2330,8 +2330,41 @@ local function setAura(on)
     refreshButtons()
 end
 
-local flyState = { Enabled = false, Speed = 40, Conn = nil }
+local flyState = { Enabled = false, Speed = 40, Conn = nil, TouchConns = {} }
 local isTouchFly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local flyTouchMove = { Input = nil, Start = Vector2.new(), Now = Vector2.new() }
+local safeFlyPos = nil
+
+local function stopFlyTouchTrack()
+    for _, c in ipairs(flyState.TouchConns) do pcall(function() c:Disconnect() end) end
+    table.clear(flyState.TouchConns)
+    flyTouchMove.Input = nil
+end
+
+local function startFlyTouchTrack()
+    stopFlyTouchTrack()
+    if not isTouchFly then return end
+    -- Joystick leido directo: con PlatformStand=true el MoveDirection da 0.
+    table.insert(flyState.TouchConns, UserInputService.InputBegan:Connect(function(input)
+        if not flyState.Enabled then return end
+        if input.UserInputType ~= Enum.UserInputType.Touch then return end
+        if flyTouchMove.Input then return end
+        local cam = Workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+        if input.Position.X > vp.X * 0.5 then return end -- mitad derecha = camara
+        flyTouchMove.Input = input
+        flyTouchMove.Start = Vector2.new(input.Position.X, input.Position.Y)
+        flyTouchMove.Now = flyTouchMove.Start
+    end))
+    table.insert(flyState.TouchConns, UserInputService.InputChanged:Connect(function(input)
+        if input == flyTouchMove.Input then
+            flyTouchMove.Now = Vector2.new(input.Position.X, input.Position.Y)
+        end
+    end))
+    table.insert(flyState.TouchConns, UserInputService.InputEnded:Connect(function(input)
+        if input == flyTouchMove.Input then flyTouchMove.Input = nil end
+    end))
+end
 
 local function setCharacterCollisions(enabled)
     local character = player.Character
@@ -2343,6 +2376,7 @@ end
 
 local function stopFly()
     if flyState.Conn then flyState.Conn:Disconnect(); flyState.Conn = nil end
+    stopFlyTouchTrack()
     local character = player.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -2353,6 +2387,7 @@ local function stopFly()
     end) end
     if humanoid then pcall(function() humanoid.PlatformStand = false; humanoid.AutoRotate = true end) end
     setCharacterCollisions(true)
+    safeFlyPos = nil
 end
 
 local function setFly(on)
@@ -2361,6 +2396,7 @@ local function setFly(on)
     if not on then stopFly(); refreshButtons(); return end
     stopFly()
     setCharacterCollisions(false)
+    startFlyTouchTrack()
     flyState.Conn = RunService.Heartbeat:Connect(function()
         if not flyState.Enabled then return end
         local character = player.Character
@@ -2369,48 +2405,60 @@ local function setFly(on)
         if not humanoid or not root or humanoid.Health <= 0 or humanoid.Sit then return end
         local cam = Workspace.CurrentCamera
         if not cam then return end
-        if isTouchFly then
-            pcall(function() humanoid.PlatformStand = false; humanoid.AutoRotate = false end)
-        else
-            pcall(function() humanoid.PlatformStand = true; humanoid.AutoRotate = false end)
-        end
+
+        -- PlatformStand SIEMPRE prendido. En celular, si se apagaba, el humanoid
+        -- caia al vacio con las colisiones desactivadas y el juego sacaba al personaje.
+        humanoid.AutoRotate = false
+        humanoid.PlatformStand = true
+
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") and part.CanCollide then pcall(function() part.CanCollide = false end) end
         end
         local animator = humanoid:FindFirstChildOfClass("Animator")
         if animator then for _, track in ipairs(animator:GetPlayingAnimationTracks()) do pcall(function() track:Stop(0) end) end end
+
+        if root.Position.Y > -20 then safeFlyPos = root.Position end
+
         local look = cam.CFrame.LookVector
         local right = cam.CFrame.RightVector
         local dir = Vector3.zero
         if isTouchFly then
-            -- Proyectamos el joystick sobre los ejes de la camara y volvemos
-            -- a aplicar LookVector CON la inclinacion: mirar arriba y avanzar
-            -- sube; mirar abajo y avanzar baja. Sin botones de UP/DN.
-            local md = humanoid.MoveDirection
-            local flatLook = Vector3.new(look.X, 0, look.Z)
-            if flatLook.Magnitude < 0.001 then flatLook = Vector3.new(0, 0, -1) end
-            flatLook = flatLook.Unit
-            local flatRight = Vector3.new(right.X, 0, right.Z)
-            if flatRight.Magnitude < 0.001 then flatRight = Vector3.new(1, 0, 0) end
-            flatRight = flatRight.Unit
-            dir = look * md:Dot(flatLook) + right * md:Dot(flatRight)
+            local forward, strafe = 0, 0
+            if flyTouchMove.Input then
+                local delta = flyTouchMove.Now - flyTouchMove.Start
+                local mag = delta.Magnitude
+                if mag > 2 then
+                    local maxMag = 45
+                    if mag > maxMag then delta = delta.Unit * maxMag end
+                    strafe = delta.X / maxMag
+                    forward = -delta.Y / maxMag -- deslizar arriba = avanzar
+                end
+            end
+            -- LookVector ya trae la inclinacion: mirar arriba + avanzar sube,
+            -- mirar abajo + avanzar baja.
+            dir = look * forward + right * strafe
         else
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + look end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - look end
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - right end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + right end
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
         end
         local face = look
-        if face.Magnitude > 0.05 then root.CFrame = CFrame.lookAt(root.Position, root.Position + face) end
+        if face.Magnitude > 0.05 then pcall(function() root.CFrame = CFrame.lookAt(root.Position, root.Position + face) end) end
         if dir.Magnitude < 0.01 then
-            root.Anchored = true
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
         else
-            if root.Anchored then root.Anchored = false end
             root.AssemblyLinearVelocity = dir.Unit * flyState.Speed
             root.AssemblyAngularVelocity = Vector3.zero
+        end
+        if root.Position.Y < -30 and safeFlyPos then
+            pcall(function()
+                root.CFrame = CFrame.new(safeFlyPos.X, safeFlyPos.Y + 2, safeFlyPos.Z)
+                root.AssemblyLinearVelocity = Vector3.zero
+            end)
         end
     end)
     refreshButtons()
