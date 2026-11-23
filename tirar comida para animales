@@ -1,1 +1,1359 @@
+local genv = getgenv()
+genv.__real_autofarm_v3 = genv.__real_autofarm_v3 or {}
+local S = genv.__real_autofarm_v3
 
+S.normal = false
+S.fast = false
+S.autoTrain = false
+S.enteringFarm = false
+
+genv.__real_autofarm_v4 = genv.__real_autofarm_v4 or {}
+local R = genv.__real_autofarm_v4
+R.instanceToken = (R.instanceToken or 0) + 1
+local TOKEN = R.instanceToken
+
+local STATE = STATE
+if type(STATE) ~= "table" then
+    local cleanups = {}
+    local connections = {}
+    STATE = {}
+
+    function STATE.alive()
+        return true
+    end
+
+    function STATE.onCleanup(fn)
+        cleanups[#cleanups + 1] = fn
+    end
+
+    function STATE.connect(signal, fn)
+        local ok, conn = pcall(function()
+            return signal:Connect(fn)
+        end)
+        if ok and conn then
+            connections[#connections + 1] = conn
+        end
+        return conn
+    end
+
+    function STATE.override(tbl, key, value)
+        pcall(function()
+            tbl[key] = value
+        end)
+    end
+
+    function STATE.namecallHook(method, fn)
+        if not genv.__real_namecall_hooks then
+            genv.__real_namecall_hooks = {}
+        end
+        local hooks = genv.__real_namecall_hooks
+        hooks[method] = hooks[method] or {}
+        hooks[method][TOKEN] = fn
+
+        if not genv.__real_namecall_installed then
+            genv.__real_namecall_installed = true
+            local old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+                local name = getnamecallmethod()
+                local list = name and genv.__real_namecall_hooks and genv.__real_namecall_hooks[name]
+                if list then
+                    for _, cb in pairs(list) do
+                        pcall(cb, self, name, ...)
+                    end
+                end
+                return old(self, ...)
+            end, "RealAutofarmNamecall"))
+            genv.__real_namecall_old = old
+        end
+    end
+
+    local finalCleanup
+    finalCleanup = function()
+        for _, conn in ipairs(connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        local hooks = genv.__real_namecall_hooks
+        if hooks then
+            for _, list in pairs(hooks) do
+                list[TOKEN] = nil
+            end
+        end
+        for i = #cleanups, 1, -1 do
+            if cleanups[i] ~= finalCleanup then
+                pcall(cleanups[i])
+            end
+        end
+    end
+    cleanups[#cleanups + 1] = finalCleanup
+end
+
+R.normal      = R.normal      or false
+R.fast        = R.fast        or false
+R.equipBest   = R.equipBest   or false
+R.autoBuyFood = R.autoBuyFood or false
+R.autoFence   = R.autoFence   or false
+if R.alwaysMax == nil then
+    R.alwaysMax = true
+end
+R.superThrow  = R.superThrow  or false
+R.autoSandwich = R.autoSandwich or false
+R.autoTrain   = R.autoTrain   or false
+R.autoTap     = R.autoTap     or false
+R.autoUpgrade = R.autoUpgrade or false
+R.webhookOn   = R.webhookOn   or false
+R.webhookUrl  = R.webhookUrl  or ""
+R.discordKg   = R.discordKg   or false
+R.discordPerSec = R.discordPerSec or false
+R.discordZone = R.discordZone or false
+R.discordLuck = R.discordLuck or false
+R.discordMutation = R.discordMutation or false
+R.discordName  = R.discordName  or false
+local WEBHOOK_NAME = "Troow Food - Xitado"
+if type(R.webhookUrl) ~= "string" then
+    R.webhookUrl = ""
+end
+R.trainRetryAt = R.trainRetryAt or 0
+R.standBlockedAt = R.standBlockedAt or 0
+R.fenceBlockedAt = R.fenceBlockedAt or 0
+R.fenceRetryAt = R.fenceRetryAt or 0
+R.fenceLastMoney = R.fenceLastMoney or nil
+R.moveToken = R.moveToken or 0
+R.throws      = R.throws      or 0
+R.maxArea     = R.maxArea     or 0
+R.epoch       = 0
+R.trainEpoch  = 0
+
+local RS = game:GetService("ReplicatedStorage")
+local F = RS:WaitForChild("Remotes")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = game:GetService("Players").LocalPlayer
+
+pcall(function()
+    for _, c in ipairs(gethui():GetChildren()) do
+        if c.Name == "WindUI" then
+            c:Destroy()
+        end
+    end
+end)
+
+local okWindUI, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+end)
+if not okWindUI or not WindUI then
+    warn("Xitado Hub: no se pudo cargar WindUI", tostring(WindUI))
+    return
+end
+
+local UIS = game:GetService("UserInputService")
+local cam = workspace.CurrentCamera
+local viewport = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+local touchOnly = UIS.TouchEnabled and not UIS.KeyboardEnabled
+local winW = touchOnly and math.clamp(viewport.X - 24, 320, 480) or 560
+local winH = touchOnly and math.clamp(viewport.Y - 90, 340, 430) or 430
+
+local Window = WindUI:CreateWindow({
+    Title = "Xitado Hub",
+    Folder = "RealAutofarmV4",
+    Size = UDim2.fromOffset(winW, winH),
+    MinSize = Vector2.new(math.min(320, winW), math.min(300, winH)),
+    MaxSize = Vector2.new(winW, winH),
+    Theme = "Dark",
+    ToggleKey = Enum.KeyCode.M, 
+    OpenButton = {
+        Title = "Xitado Hub",
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = false, 
+        Scale = 0.9,
+    },
+})
+
+local MainTab    = Window:Tab({ Title = "Main" })
+local FarmTab    = Window:Tab({ Title = "Auto Farm" })
+local TrainTab   = Window:Tab({ Title = "Auto train" })
+local DiscordTab = Window:Tab({ Title = "Discord" })
+
+local function inv(name, ...)
+    local args = { ... }
+    local r = F:WaitForChild(name)
+    local ok, res = pcall(function()
+        return r:InvokeServer(table.unpack(args))
+    end)
+    if not ok then
+        return { Ok = false, Reason = tostring(res) }
+    end
+    if type(res) ~= "table" then
+        return { Ok = false, Reason = "respuesta invalida" }
+    end
+    return res
+end
+
+local function fire(name)
+    pcall(function()
+        F:WaitForChild(name):FireServer()
+    end)
+end
+
+local function invAsync(name, ...)
+    local args = { ... }
+    task.spawn(function()
+        pcall(function()
+            F:WaitForChild(name):InvokeServer(table.unpack(args))
+        end)
+    end)
+end
+
+local okMeter, ThrowMeter = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.ThrowMeter)
+end)
+if okMeter then
+    pcall(function()
+        ThrowMeter.TestAutoTap = 0.12
+    end)
+end
+
+local okMove, Movement = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.Movement)
+end)
+local okClientState, ClientState = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.ClientState)
+end)
+
+local MeterMath = require(RS:WaitForChild("Shared"):WaitForChild("ThrowMeterMath"))
+local originalPosition = MeterMath.Position
+STATE.override(MeterMath, "Position", function(t)
+    if R.alwaysMax then
+        return 1
+    end
+    return originalPosition(t)
+end)
+
+local REMOTE_WAIT = 0.3
+local LOOP_NORMAL = 1.8
+local LOOP_FAST = 2.5
+local WALK_SPEED = 45
+
+local function notifyError()
+    
+end
+
+local function loadModule(path)
+    local ok, mod = pcall(function()
+        local current = RS
+        for part in string.gmatch(path, "[^%.]+") do
+            current = current:WaitForChild(part)
+        end
+        return require(current)
+    end)
+    if ok then
+        return mod
+    end
+    return nil
+end
+
+local function luckText(res)
+    local LC = loadModule("Shared.LuckyCatch")
+    local odds
+
+    if type(res.Lucky) == "table" then
+        local l = res.Lucky
+        odds = tonumber(l.OneIn) or tonumber(l.OneInOdds) or tonumber(l.Odds)
+        if not odds and l.Chance then
+            odds = LC and tonumber(LC.GetOneInOdds(tonumber(l.Chance) or 0)) or nil
+        end
+        if not odds and l.Tier and LC and LC.GetTierOneInOdds then
+            odds = tonumber(LC.GetTierOneInOdds(l.Tier))
+        end
+    end
+
+    odds = odds or tonumber(res.OneIn) or tonumber(res.LuckyOneIn)
+    if not odds and tonumber(res.Chance) and LC then
+        odds = tonumber(LC.GetOneInOdds(tonumber(res.Chance)))
+    end
+    if not odds then
+        local GC = loadModule("Config.GameConfig")
+        if GC and type(GC.LuckyCatch) == "table" and LC then
+            odds = tonumber(LC.GetOneInOdds(tonumber(GC.LuckyCatch.MaxChance) or 0))
+        end
+    end
+
+    if odds and odds > 0 then
+        return "1 en " .. tostring(math.floor(odds + 0.5))
+    end
+    return "1 en X"
+end
+
+local function kgText(res)
+    local name = res.ModelName or res.DisplayName
+    local size = tonumber(res.Size) or 1
+    local M = loadModule("Shared.Mutations")
+    if M and name then
+        local ok, weight = pcall(function()
+            return M.FormatWeight(M.Weight(name, size))
+        end)
+        if ok and type(weight) == "string" and weight ~= "" then
+            return weight
+        end
+    end
+    return tostring(res.Size or 1)
+end
+
+local function animalNameText(res)
+    return tostring(res.DisplayName or res.ModelName or res.Name or "Desconocido")
+end
+
+local function mutationText(res)
+    local m = res.Mutation
+    if type(m) == "table" then
+        m = m.Name or m.Mutation or m.Key
+    end
+    if type(m) == "string" and m ~= "" then
+        return m
+    end
+    return "ninguna"
+end
+
+local webhookQueue = {}
+local webhookBusy = false
+local function drainWebhookQueue()
+    if webhookBusy then
+        return
+    end
+    webhookBusy = true
+    task.spawn(function()
+        while STATE.alive() and #webhookQueue > 0 do
+            local content = table.remove(webhookQueue, 1)
+            local url = R.webhookUrl
+            local req = request or (type(http_request) == "function" and http_request or nil)
+            if type(url) == "string" and url ~= "" and req then
+                for attempt = 1, 4 do
+                    local ok, resp = pcall(function()
+                        return req({
+                            Url = url,
+                            Method = "POST",
+                            Headers = { ["Content-Type"] = "application/json" },
+                            Body = HttpService:JSONEncode({ content = content }),
+                        })
+                    end)
+                    local status = 0
+                    if type(resp) == "table" then
+                        status = tonumber(resp.StatusCode or resp.status or resp.Status) or 0
+                    end
+                    if ok and (status == 0 or (status >= 200 and status < 300)) then
+                        break
+                    end
+                    task.wait(0.5 * attempt)
+                end
+            end
+            task.wait(0.1)
+        end
+        webhookBusy = false
+    end)
+end
+
+local function postWebhook(content)
+    webhookQueue[#webhookQueue + 1] = content
+    drainWebhookQueue()
+end
+
+local function sendResultWebhook(res)
+    if not R.webhookOn then
+        return
+    end
+    local lines = {}
+    if R.discordKg then
+        lines[#lines + 1] = "kg ; " .. kgText(res)
+    end
+    if R.discordPerSec then
+        local okNF, NF = pcall(function()
+            return require(RS:WaitForChild("Shared"):WaitForChild("NumberFormat"))
+        end)
+        local per = okNF and NF.PerSecond(tonumber(res.Income) or 0) or tostring(res.Income)
+        lines[#lines + 1] = "$/s ; " .. tostring(per)
+    end
+    if R.discordZone then
+        lines[#lines + 1] = "Zone ; " .. tostring(res.AreaName or res.AreaKey)
+    end
+    if R.discordLuck then
+        local luck = luckText(res)
+        if not luck or luck == "" then
+            luck = "1 en X"
+        end
+        lines[#lines + 1] = "Luck ; " .. luck
+    end
+    if R.discordMutation then
+        lines[#lines + 1] = "Mutacion ; " .. mutationText(res)
+    end
+    if R.discordName then
+        lines[#lines + 1] = "Nombre ; " .. animalNameText(res)
+    end
+    if #lines == 0 then
+        return
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "@everyone"
+    postWebhook(table.concat(lines, "\n"))
+end
+
+local function sendTestWebhook()
+    postWebhook("test completado\n\nkg ; \n$/s ; \nZone ; \nLuck ; 1 en X\nMutacion ; \n\n@everyone")
+end
+
+local renameScheduled = false
+local function renameWebhook()
+    local url = R.webhookUrl
+    if type(url) ~= "string" or not url:find("^https://discord.com/api/webhooks/") then
+        return
+    end
+    local req = request or (type(http_request) == "function" and http_request or nil)
+    if not req then
+        return
+    end
+    task.spawn(function()
+        pcall(function()
+            req({
+                Url = url,
+                Method = "PATCH",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode({ name = WEBHOOK_NAME }),
+            })
+        end)
+    end)
+end
+
+local function scheduleRename()
+    if renameScheduled then
+        return
+    end
+    renameScheduled = true
+    task.delay(1.5, function()
+        renameScheduled = false
+        renameWebhook()
+    end)
+end
+
+local sentByRef = setmetatable({}, { __mode = "k" })
+local lastSentKey, lastSentAt = nil, 0
+local function notifyResult(res)
+    if type(res) ~= "table" or sentByRef[res] then
+        return
+    end
+    sentByRef[res] = true
+
+    local key = table.concat({
+        tostring(res.Throws), tostring(res.DisplayName), tostring(res.ModelName),
+        tostring(res.Income), tostring(res.AreaIndex), tostring(res.Size),
+        tostring(res.Mutation), tostring(res.Highlight),
+    }, "|")
+    local now = os.clock()
+    if key == lastSentKey and now - lastSentAt < 1.5 then
+        return
+    end
+    lastSentKey, lastSentAt = key, now
+
+    local area = tonumber(res.AreaIndex) or 0
+    if area > R.maxArea then
+        R.maxArea = area
+    end
+    sendResultWebhook(res)
+end
+
+local FARM_ENTRY = Vector3.new(1, 5, 13)
+local FARM_HOME  = CFrame.new(1, 5, -38)
+local STAND_HOME = CFrame.new(34, 5, -5)
+
+local function stopMovement()
+    R.moveToken = (R.moveToken or 0) + 1
+    pcall(function()
+        local ch = LocalPlayer.Character
+        local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+        local root = hum and hum.RootPart
+        if hum and root then
+            hum:MoveTo(root.Position)
+        end
+    end)
+end
+
+local function moveTo(cf, speed)
+    pcall(function()
+        local ch = LocalPlayer.Character
+        local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+        local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then
+            return
+        end
+
+        if okMove then
+            pcall(function()
+                if Movement.IsLocked() then
+                    Movement.Unlock()
+                end
+            end)
+        end
+
+        local target = typeof(cf) == "CFrame" and cf.Position or cf
+        local dist = (target - hrp.Position).Magnitude
+        if dist < 0.5 then
+            return
+        end
+
+        local oldSpeed = hum.WalkSpeed
+        hum.WalkSpeed = speed or WALK_SPEED
+        pcall(function()
+            hum:MoveTo(target)
+        end)
+
+        local deadline = os.clock() + math.max(3, dist / (speed or WALK_SPEED) + 4)
+        local lastPos = hrp.Position
+        local stuckAt = os.clock()
+        local lastIssue = os.clock()
+        local token = R.moveToken
+        local aborted = false
+        while STATE.alive() and os.clock() < deadline do
+            if R.moveToken ~= token then
+                aborted = true
+                break
+            end
+            local root = ch:FindFirstChild("HumanoidRootPart")
+            if not root then
+                break
+            end
+            local moving = hum.MoveDirection.Magnitude > 0.05
+            if moving then
+                lastIssue = os.clock()
+            elseif os.clock() - lastIssue >= 0.4 then
+                hum.WalkSpeed = speed or WALK_SPEED
+                pcall(function() hum:MoveTo(target) end)
+                lastIssue = os.clock()
+            end
+            local remaining = (target - root.Position).Magnitude
+            if remaining < 2.5 then
+                break
+            end
+            if (lastPos - root.Position).Magnitude > 0.2 then
+                lastPos = root.Position
+                stuckAt = os.clock()
+            elseif os.clock() - stuckAt > 2 then
+                break 
+            end
+            task.wait(0.1)
+        end
+        pcall(function()
+            local root = hum.RootPart
+            if root then
+                hum:MoveTo(root.Position)
+            end
+        end)
+        hum.WalkSpeed = oldSpeed
+        if not STATE.alive() then
+            aborted = true
+        end
+        if aborted then
+            return
+        end
+
+        pcall(function()
+            local root = ch:FindFirstChild("HumanoidRootPart")
+            if root and (target - root.Position).Magnitude > 1.5 then
+                root.CFrame = typeof(cf) == "CFrame" and cf or CFrame.new(target)
+                pcall(function()
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end)
+            end
+        end)
+    end)
+end
+
+local function teleportFarm()
+    moveTo(FARM_HOME)
+end
+
+local function enterFarm()
+    R.enteringFarm = true
+    moveTo(FARM_ENTRY)
+    moveTo(FARM_HOME)
+    R.enteringFarm = false
+end
+
+local teleportStand 
+
+local function stopped(epoch)
+    return epoch ~= R.epoch or not (R.normal or R.fast)
+end
+
+local armSandwich
+
+local function throwOnce(mode, epoch)
+    
+    pcall(function()
+        local chr = LocalPlayer.Character
+        local root = chr and chr:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = FARM_HOME
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+    local readyLeft = 0
+    pcall(function()
+        readyLeft = (LocalPlayer:GetAttribute("ThrowReadyAt") or 0) - workspace:GetServerTimeNow()
+    end)
+    if readyLeft > 0 then
+        task.wait(math.min(readyLeft + 0.2, 3))
+    end
+    invAsync("Throw_Cancel", "Reset")
+    task.wait(0.35)
+    local started
+    for attempt = 1, 3 do
+        started = inv("Throw_Start")
+        if started.Ok or stopped(epoch) then
+            break
+        end
+        invAsync("Throw_Cancel", "Reset")
+        task.wait(0.9)
+    end
+    if not started.Ok then
+        if tostring(started.Reason) == "Busy" then
+            invAsync("Throw_Cancel", "Reset")
+        end
+        notifyError(tostring(started.Reason))
+        return false
+    end
+    if stopped(epoch) then
+        invAsync("Throw_Cancel", "Reset")
+        return false
+    end
+
+    task.wait(REMOTE_WAIT)
+
+    armSandwich()
+
+    local pos = 1
+
+    if mode == "normal" then
+        if R.superThrow then
+            inv("Throw_UseSuper")
+            task.wait(REMOTE_WAIT)
+            if stopped(epoch) then
+                invAsync("Throw_Cancel", "Reset")
+                return false
+            end
+        end
+        fire("Throw_MeterStarted")
+        task.wait(REMOTE_WAIT)
+        if stopped(epoch) then
+            invAsync("Throw_Cancel", "Reset")
+            return false
+        end
+    end
+
+    local res = inv("Throw_Resolve", pos)
+    if not res.Ok then
+        notifyError("resolve: " .. tostring(res.Reason))
+        return false
+    end
+    if stopped(epoch) then
+        invAsync("Throw_Cancel", "Reset")
+        return false
+    end
+
+    task.wait(REMOTE_WAIT)
+
+    if mode == "normal" then
+        fire("Throw_Revealed")
+        task.wait(REMOTE_WAIT)
+        if stopped(epoch) then
+            invAsync("Throw_Cancel", "Reset")
+            return false
+        end
+    end
+
+    local done = inv("Throw_Complete")
+    if not done.Ok then
+        notifyError("complete: " .. tostring(done.Reason))
+        return false
+    end
+
+    invAsync("Throw_Cancel", "Reset")
+
+    R.throws = R.throws + 1
+    notifyResult(res)
+    return true
+end
+
+local okFoods, FoodsConfig = pcall(function()
+    return require(RS:WaitForChild("Config"):WaitForChild("FoodsConfig"))
+end)
+local okCurve, BalanceCurve = pcall(function()
+    return require(RS:WaitForChild("Shared"):WaitForChild("BalanceCurve"))
+end)
+local okStands, StandsConfig = pcall(function()
+    return require(RS:WaitForChild("Config"):WaitForChild("StandsConfig"))
+end)
+local okData, DataController = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.DataController)
+end)
+local okTrain, TrainingController = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.TrainingController)
+end)
+local okThrow, ThrowController = pcall(function()
+    return require(LocalPlayer.PlayerScripts.Client.Controllers.ThrowController)
+end)
+
+local function standPositionFromInfo(info)
+    if type(info) ~= "table" then
+        return nil
+    end
+    local keys = {
+        "Position", "CFrame", "StandPosition", "StandCFrame",
+        "Pos", "Location", "Spawn", "SpawnPosition", "TrainingPosition",
+    }
+    for _, key in ipairs(keys) do
+        local value = info[key]
+        if typeof(value) == "Vector3" then
+            return CFrame.new(value)
+        elseif typeof(value) == "CFrame" then
+            return value
+        end
+    end
+    return nil
+end
+
+local function findStandCFrame()
+    
+    if okData and okStands then
+        local okTier, tierValue = pcall(function()
+            return tonumber(DataController:Get("Stand")) or 0
+        end)
+        local tier = okTier and tierValue or 0
+        local okInfo, info = pcall(function()
+            return StandsConfig.Get(tier)
+        end)
+        if okInfo then
+            local cf = standPositionFromInfo(info)
+            if cf then
+                return cf
+            end
+        end
+    end
+
+    local patterns = {
+        "stand", "barra", "bar", "training", "train",
+        "bench", "press", "maquina", "gym", "spot", "spawn",
+    }
+    local best, bestScore = nil, math.huge
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local name = string.lower(obj.Name)
+        local matched = false
+        for _, pattern in ipairs(patterns) do
+            if string.find(name, pattern, 1, true) then
+                matched = true
+                break
+            end
+        end
+        if matched and (obj:IsA("Model") or obj:IsA("BasePart")) then
+            local cf = nil
+            if obj:IsA("Model") and obj.GetModelCFrame then
+                local okCf, result = pcall(function() return obj:GetModelCFrame() end)
+                if okCf then cf = result end
+            else
+                local okCf, result = pcall(function() return obj.CFrame end)
+                if okCf then cf = result end
+            end
+            if cf then
+                local pos = cf.Position
+                if pos.Y > -50 and pos.Y < 500 then
+                    local score = (pos - STAND_HOME.Position).Magnitude
+                    if obj:IsA("Model") then
+                        score = score - 1
+                    end
+                    if score < bestScore then
+                        best, bestScore = cf, score
+                    end
+                end
+            end
+        end
+    end
+
+    if best then
+      
+        return best + Vector3.new(0, 2.5, 0)
+    end
+
+    return STAND_HOME
+end
+
+teleportStand = function()
+    moveTo(findStandCFrame())
+end
+
+genv.__xitado_food_debug = genv.__xitado_food_debug or {}
+genv.__xitado_food_debug.findStandCFrame = function()
+    local cf = findStandCFrame()
+    return { X = cf.Position.X, Y = cf.Position.Y, Z = cf.Position.Z }
+end
+
+R.nativeSeq = R.nativeSeq or 0
+if okThrow then
+    pcall(function()
+        STATE.connect(ThrowController.Finished, function(res)
+            if type(res) ~= "table" or not res.Ok then
+                return
+            end
+            R.nativeSeq = R.nativeSeq + 1
+            R.nativeResult = res
+            
+            notifyResult(res)
+        end)
+    end)
+end
+
+local function buyBestFood()
+    if not (okFoods and okCurve and okData) then
+        notifyError("No se pudo leer la configuracion de comida.")
+        return
+    end
+
+    local bestOwned = 0
+    for i = 1, FoodsConfig.Count() do
+        if DataController:GetPath("OwnedFoods." .. i) == true then
+            bestOwned = i
+        end
+    end
+
+    local money = tonumber(DataController:Get("Money")) or 0
+    for i = FoodsConfig.CountAll(), bestOwned + 1, -1 do
+        local food = FoodsConfig.GetAny(i)
+        if food then
+            local price = BalanceCurve.GetItemPrice(LocalPlayer, food)
+            if price and price > 0 and price <= money then
+                local res = inv("Shop_Buy", i)
+                if res.Ok then
+                    
+                    inv("Shop_Equip", i)
+                    return
+                end
+            end
+        end
+    end
+end
+
+local function nextStandPrice()
+    if not (okStands and okCurve and okData) then
+        return nil
+    end
+    local stand = tonumber(DataController:Get("Stand")) or 0
+    local nextStand = StandsConfig.Get(stand + 1)
+    if not nextStand then
+        return nil
+    end
+    return tonumber(BalanceCurve.GetItemPrice(LocalPlayer, nextStand)) or nil
+end
+
+local function trainRunning()
+    if not okTrain then
+        return false
+    end
+    local ok, res = pcall(function()
+        return TrainingController.IsRunning()
+    end)
+    return ok and res == true
+end
+
+local function stopTraining()
+    pcall(function()
+        if okTrain then
+            TrainingController.Stop()
+        end
+    end)
+    inv("Training_Stop")
+end
+
+local SANDWICH_TYPES = { "Mega", "Big", "Regular" }
+armSandwich = function()
+    if not R.autoSandwich or R.superThrow then
+        return
+    end
+    if not okData then
+        return
+    end
+    local th = DataController:Get("Thanksgiving")
+    if type(th) ~= "table" or type(th.Sandwiches) ~= "table" then
+        return
+    end
+    for _, name in ipairs(SANDWICH_TYPES) do
+        if (tonumber(th.Sandwiches[name]) or 0) > 0 then
+            inv("Throw_UseSandwich", name)
+            return
+        end
+    end
+end
+
+local function throwNative(epoch)
+    if not okThrow then
+        return false
+    end
+
+    local seq0 = R.nativeSeq
+    if R.nativeSeq > seq0 and type(R.nativeResult) == "table" and R.nativeResult.Ok then
+        R.throws = R.throws + 1
+        notifyResult(R.nativeResult)
+        return true
+    end
+
+    local waitAuto = os.clock() + 0.6
+    while R.nativeSeq == seq0 and os.clock() < waitAuto and STATE.alive()
+        and R.instanceToken == TOKEN and R.epoch == epoch do
+        task.wait(0.1)
+    end
+    if R.nativeSeq > seq0 and type(R.nativeResult) == "table" and R.nativeResult.Ok then
+        R.throws = R.throws + 1
+        notifyResult(R.nativeResult)
+        return true
+    end
+    if stopped(epoch) then
+        return false
+    end
+
+    local busy = false
+    if okClientState then
+        pcall(function() busy = ClientState.Busy == "Throw" end)
+    end
+
+    if not busy then
+    
+        if okMove then
+            pcall(function() Movement.Unlock() end)
+        end
+        pcall(function()
+            local chr = LocalPlayer.Character
+            local root = chr and chr:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = FARM_HOME
+                root.AssemblyLinearVelocity = Vector3.zero
+            end
+        end)
+        local readyLeft = 0
+        pcall(function()
+            readyLeft = (LocalPlayer:GetAttribute("ThrowReadyAt") or 0) - workspace:GetServerTimeNow()
+        end)
+        if readyLeft > 0 then
+            task.wait(math.min(readyLeft + 0.2, 3))
+        end
+
+        if okMeter then
+            pcall(function()
+                ThrowMeter.TestAutoTap = 0.12
+            end)
+        end
+
+        if R.superThrow then
+            inv("Throw_UseSuper")
+        end
+
+        task.spawn(function()
+            pcall(function()
+                ThrowController.Start()
+            end)
+        end)
+
+        task.spawn(function()
+            task.wait(0.4)
+            if R.epoch == epoch then
+                armSandwich()
+            end
+        end)
+    end
+
+    local deadline = os.clock() + 3
+    while R.nativeSeq == seq0 and STATE.alive() and R.instanceToken == TOKEN and R.epoch == epoch and os.clock() < deadline do
+        task.wait(0.1)
+    end
+
+    if R.nativeSeq > seq0 and type(R.nativeResult) == "table" and R.nativeResult.Ok then
+        R.throws = R.throws + 1
+        notifyResult(R.nativeResult)
+        return true
+    end
+
+    invAsync("Throw_Cancel", "Reset")
+    task.wait(0.2)
+    if stopped(epoch) then
+        return false
+    end
+    return throwOnce("normal", epoch)
+end
+
+pcall(function()
+    local bonusEvent = F:WaitForChild("Training_Bonus")
+    STATE.connect(bonusEvent.OnClientEvent, function(id)
+        if R.autoTap then
+            inv("Training_TapBonus", id)
+        end
+    end)
+end)
+
+MainTab:Toggle({
+    Title = "Auto Equip Best (10 seg)",
+    Value = R.equipBest,
+    Callback = function(v) R.equipBest = v end,
+})
+
+MainTab:Toggle({
+    Title = "Auto Buy Food",
+    Value = R.autoBuyFood,
+    Callback = function(v) R.autoBuyFood = v end,
+})
+
+MainTab:Toggle({
+    Title = "Auto Upgrade Plot",
+    Value = R.autoFence,
+    Callback = function(v)
+        R.autoFence = v
+        R.fenceBlockedAt = 0
+        R.fenceRetryAt = 0
+        R.fenceLastMoney = nil
+    end,
+})
+
+MainTab:Button({
+    Title = "Equip Best ahora",
+    Callback = function()
+        inv("Plot_EquipBest")
+    end,
+})
+
+MainTab:Button({
+    Title = "Comprar comida ahora",
+    Callback = buyBestFood,
+})
+
+MainTab:Button({
+    Title = "Vender todo ahora",
+    Callback = function()
+        inv("Plot_SellAll") 
+    end,
+})
+
+local switching = false
+local normalToggle
+local fastToggle
+
+normalToggle = FarmTab:Toggle({
+    Title = "Auto Farm Normal",
+    Value = R.normal,
+    Callback = function(v)
+        if switching then return end
+        R.epoch = R.epoch + 1
+        stopMovement()
+        R.normal = v
+        if v then
+            R.fast = false
+            switching = true
+            pcall(function() fastToggle:Set(false) end)
+            switching = false
+            pcall(stopTraining)
+            enterFarm()
+        end
+    end,
+})
+
+fastToggle = FarmTab:Toggle({
+    Title = "Auto Farm Rapido",
+    Value = R.fast,
+    Callback = function(v)
+        if switching then return end
+        R.epoch = R.epoch + 1
+        stopMovement()
+        R.fast = v
+        if v then
+            R.normal = false
+            switching = true
+            pcall(function() normalToggle:Set(false) end)
+            switching = false
+            pcall(stopTraining)
+            enterFarm()
+        end
+    end,
+})
+
+FarmTab:Toggle({
+    Title = "Siempre 20 Medidor",
+    Value = R.alwaysMax,
+    Callback = function(v) R.alwaysMax = v end,
+})
+
+FarmTab:Toggle({
+    Title = "Auto Super Trow",
+    Value = R.superThrow,
+    Callback = function(v) R.superThrow = v end,
+})
+
+FarmTab:Toggle({
+    Title = "Auto Sandwich",
+    Value = R.autoSandwich,
+    Callback = function(v) R.autoSandwich = v end,
+})
+
+TrainTab:Toggle({
+    Title = "Auto train",
+    Value = R.autoTrain,
+    Callback = function(v)
+        R.trainEpoch = R.trainEpoch + 1
+        stopMovement()
+        R.autoTrain = v
+        if v then
+            stopTraining()
+            teleportStand()
+            R.trainRetryAt = os.clock() + 1.8
+        else
+            stopTraining()
+        end
+    end,
+})
+
+TrainTab:Toggle({
+    Title = "auto tap x2 bonus",
+    Value = R.autoTap,
+    Callback = function(v)
+        R.autoTap = v
+    end,
+})
+
+TrainTab:Toggle({
+    Title = "auto mejorar barra",
+    Value = R.autoUpgrade,
+    Callback = function(v)
+        R.autoUpgrade = v
+        R.standBlockedAt = 0
+    end,
+})
+
+DiscordTab:Toggle({
+    Title = "activar webhook",
+    Value = R.webhookOn,
+    Callback = function(v)
+        R.webhookOn = v
+        if v then
+            renameWebhook()
+        end
+    end,
+})
+
+DiscordTab:Input({
+    Title = "Webhook URL",
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Value = R.webhookUrl,
+    Callback = function(v)
+        if type(v) == "string" then
+            R.webhookUrl = v
+            if v ~= "" then
+                scheduleRename()
+            end
+        end
+    end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar De Cuantos kg Es",
+    Value = R.discordKg,
+    Callback = function(v) R.discordKg = v end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar cuanto Genera Por Seg",
+    Value = R.discordPerSec,
+    Callback = function(v) R.discordPerSec = v end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar De Que Zona Es",
+    Value = R.discordZone,
+    Callback = function(v) R.discordZone = v end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar De Que Suerte Salio",
+    Value = R.discordLuck,
+    Callback = function(v) R.discordLuck = v end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar que mutacion salio",
+    Value = R.discordMutation,
+    Callback = function(v) R.discordMutation = v end,
+})
+
+DiscordTab:Toggle({
+    Title = "Mandar nombre Del Animal",
+    Value = R.discordName,
+    Callback = function(v) R.discordName = v end,
+})
+
+DiscordTab:Button({
+    Title = "test webhook",
+    Callback = sendTestWebhook,
+})
+
+STATE.onCleanup(function()
+    R.epoch = R.epoch + 1
+    R.trainEpoch = R.trainEpoch + 1
+    stopMovement()
+    R.normal = false
+    R.fast = false
+    R.equipBest = false
+    R.autoBuyFood = false
+    R.autoFence = false
+    R.autoTrain = false
+    R.autoTap = false
+    R.autoUpgrade = false
+    pcall(stopTraining)
+    pcall(function() Window:Destroy() end)
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if not (R.normal or R.fast) then
+            task.wait(0.15)
+        else
+            
+            while R.enteringFarm and STATE.alive() and R.instanceToken == TOKEN do
+                task.wait(0.1)
+            end
+            local epoch = R.epoch
+            local mode = R.normal and "normal" or "fast"
+            if stopped(epoch) then
+                continue
+            end
+            if mode == "normal" then
+                throwNative(epoch)
+            else
+                throwOnce(mode, epoch)
+            end
+            if stopped(epoch) then
+                continue
+            end
+            
+            enterFarm()
+            task.wait(mode == "normal" and LOOP_NORMAL or LOOP_FAST)
+        end
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if R.equipBest then
+            inv("Plot_EquipBest")
+        end
+        task.wait(10)
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if R.autoBuyFood then
+            local ok, err = pcall(buyBestFood)
+            if not ok then
+                notifyError("Auto buy food: " .. tostring(err))
+            end
+        end
+        task.wait(10)
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if R.autoFence then
+            local money = tonumber(DataController:Get("Money")) or 0
+            local now = os.clock()
+            if now >= (R.fenceRetryAt or 0)
+                and (R.fenceLastMoney == nil or money ~= R.fenceLastMoney) then
+                R.fenceLastMoney = money
+                local ok, res = pcall(function()
+                    local Event = game:GetService("ReplicatedStorage").Remotes.Plot_UpgradeFence
+                    return Event:InvokeServer()
+                end)
+                if ok and type(res) == "table" and res.Ok then
+                    R.fenceRetryAt = now + 2
+                    R.fenceLastMoney = nil
+                elseif ok and type(res) == "table" and tostring(res.Reason) == "Money" then
+                    R.fenceRetryAt = now + 8
+                else
+                    R.fenceRetryAt = now + 4
+                end
+            end
+        end
+        task.wait(2)
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if not R.autoTrain then
+            task.wait(0.2)
+        else
+            local epoch = R.trainEpoch
+            if trainRunning() then
+                task.wait(0.4)
+            else
+                if os.clock() < R.trainRetryAt then
+                    task.wait(0.2)
+                    continue
+                end
+                teleportStand()
+                task.wait(0.5)
+                if not R.autoTrain or R.trainEpoch ~= epoch then
+                    continue
+                end
+                task.spawn(function()
+                    if epoch ~= R.trainEpoch or not R.autoTrain then
+                        return
+                    end
+                    pcall(function()
+                        TrainingController.Start()
+                    end)
+                end)
+                task.wait(0.6)
+                if not trainRunning() then
+                    R.trainRetryAt = os.clock() + 1.8
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if R.autoTap then
+            inv("Training_TapBonus", 1)
+        end
+        task.wait(0.5)
+    end
+end)
+
+task.spawn(function()
+    while STATE.alive() and R.instanceToken == TOKEN do
+        if R.autoUpgrade then
+            local money = tonumber(DataController:Get("Money")) or 0
+            local price = nextStandPrice()
+            local enough = price and price > 0 and price <= money
+            local unblocked = money > (R.standBlockedAt or 0)
+            if enough and unblocked then
+                local res = inv("Stand_Upgrade")
+                local reason = tostring(res.Reason)
+                if res.Ok then
+                    R.standBlockedAt = 0
+                elseif reason == "TooFar" then
+                    teleportStand()
+                    local res2 = inv("Stand_Upgrade")
+                    if not res2.Ok and tostring(res2.Reason) == "Money" then
+                        R.standBlockedAt = money
+                    end
+                elseif reason == "Money" then
+                    R.standBlockedAt = money
+                end
+            end
+        end
+        task.wait(2)
+    end
+end)
+
+task.delay(1, renameWebhook)
