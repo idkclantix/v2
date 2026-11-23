@@ -1,0 +1,1496 @@
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+while not LP do task.wait() LP = Players.LocalPlayer end
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Assets = require(RS.Data.Assets)
+local ItemDisplay = require(RS.Shared.Modules.ItemDisplay)
+local Mutations = require(RS.Shared.Modules.Mutations)
+local AssetItems = require(RS.Shared.Util.AssetItems)
+local AssetEarnings = require(RS.Shared.Util.AssetEarnings)
+
+local function tryRequire(inst)
+    if not inst then return nil end
+    local ok, mod = pcall(function() return require(inst) end)
+    if ok then return mod end
+    return nil
+end
+
+local Simple = tryRequire(RS.Packages and RS.Packages.FormatNumber and RS.Packages.FormatNumber.Simple)
+local PlotState = tryRequire(RS.Client and RS.Client.PlotState)
+local AssetToolRig = tryRequire(RS.Shared and RS.Shared.Modules and RS.Shared.Modules.AssetToolRig)
+local AssetRoster = tryRequire(RS.Client and RS.Client.AssetRoster)
+local Save = tryRequire(RS.Shared and RS.Shared.Save)
+local AssetPlacementHints = tryRequire(
+    RS.Controllers and RS.Controllers.Game and RS.Controllers.Game.Plots
+    and RS.Controllers.Game.Plots.ActiveAssetsController
+    and RS.Controllers.Game.Plots.ActiveAssetsController.AssetPlacementHints
+)
+
+local function notify(cfg) pcall(function() WindUI:Notify(cfg) end) end
+
+if getgenv().FakePetConns then
+    for _, c in ipairs(getgenv().FakePetConns) do pcall(function() c:Disconnect() end) end
+end
+getgenv().FakePetConns = {}
+local function track(c) getgenv().FakePetConns[#getgenv().FakePetConns + 1] = c return c end
+
+local old = workspace:FindFirstChild("FakePets_LocalOnly")
+if old then old:Destroy() end
+local folder = Instance.new("Folder")
+folder.Name = "FakePets_LocalOnly"
+folder.Parent = workspace
+
+local hui = typeof(gethui) == "function" and gethui() or LP.PlayerGui
+for _, d in ipairs(hui:GetChildren()) do
+    if d.Name == "FakeMoneyHUD_LocalOnly" then d:Destroy() end
+end
+
+local function stripLocalTools(container)
+    if not container then return end
+    for _, t in ipairs(container:GetChildren()) do
+        if t:IsA("Tool") and t:GetAttribute("FakePetLocal") then pcall(function() t:Destroy() end) end
+    end
+end
+stripLocalTools(LP.Backpack)
+stripLocalTools(LP.Character)
+
+local oldBg = LP.PlayerGui:FindFirstChild("BackpackGui")
+if oldBg then
+    local oldSf = oldBg:FindFirstChild("Backpack")
+    oldSf = oldSf and oldSf:FindFirstChild("Main")
+    oldSf = oldSf and oldSf:FindFirstChild("Inventory")
+    oldSf = oldSf and oldSf:FindFirstChild("ScrollingFrame")
+    if oldSf then
+        for _, c in ipairs(oldSf:GetChildren()) do
+            if c:GetAttribute("FakePetVisualSlot") then pcall(function() c:Destroy() end) end
+        end
+    end
+end
+
+local MONEY_CAP = 120e18  
+local SPEED_CAP = 120e15  
+
+local function compact(n)
+    n = math.max(0, tonumber(n) or 0)
+    if Simple then
+        local ok, s = pcall(function() return Simple.FormatCompact(math.floor(n), ".##") end)
+        if ok and type(s) == "string" and s ~= "" then return s end
+    end
+    local suf = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc" }
+    local i = 1
+    while n >= 1000 and i < #suf do n /= 1000 i += 1 end
+    if i == 1 then return tostring(math.floor(n)) end
+    return ("%.2f%s"):format(n, suf[i])
+end
+
+local SUFFIX = {
+    [""] = 1, K = 1e3, M = 1e6, B = 1e9, T = 1e12, QA = 1e15, QI = 1e18,
+    SX = 1e21, SP = 1e24, OC = 1e27, NO = 1e30, DC = 1e33, UD = 1e36,
+}
+local function parseCompact(str)
+    local s = tostring(str or ""):gsub("[,%$%s]", "")
+    local num, suf = s:match("^(%d*%.?%d*)(%a*)$")
+    if not num or num == "" then return nil end
+    local mult = SUFFIX[tostring(suf):upper()]
+    if not mult then return nil end
+    local v = tonumber(num)
+    return v and v * mult or nil
+end
+
+local function realHUDLabels()
+    local money, speed = {}, {}
+    local hud = LP.PlayerGui:FindFirstChild("HUD")
+    if not hud then return money, speed end
+    local function add(root, name, list)
+        if not root then return end
+        local box = root:FindFirstChild(name)
+        if not box then return end
+        local v = box:FindFirstChild("Value")
+        if v and v:IsA("TextLabel") then list[#list + 1] = v end
+    end
+    local gh = hud:FindFirstChild("GameHUD")
+    local bl = gh and gh:FindFirstChild("BottomLeft")
+    add(bl, "Money", money)
+    add(bl, "Speed", speed)
+    local tm = hud:FindFirstChild("TradmilHud")
+    local tbl = tm and tm:FindFirstChild("BottomLeft")
+    add(tbl, "Money", money)
+    add(tbl, "Speed", speed)
+    return money, speed
+end
+
+local function readLabelValue(labels)
+    for _, lbl in ipairs(labels) do
+        local n = parseCompact(lbl.Text)
+        if n and n > 0 then return n end
+    end
+    return 0
+end
+
+local function readRealMoney()
+    local n = readLabelValue(realHUDLabels())
+    if n > 0 then return n end
+    return LP:GetAttribute("Money") or 0
+end
+
+local function readRealSpeed()
+    local n = readLabelValue(select(2, realHUDLabels()))
+    if n > 0 then return n end
+    return LP:GetAttribute("MoneyPerSecond") or 0
+end
+
+local placed = {}       
+local fakeTools = {}    
+local fakeToolsList = {} 
+local bagCounter = 0
+local fakeUIDs = {}    
+local fakeInventory = {}
+local fakeEquipped = {} 
+local syncBackpackVisualSlots 
+
+local function fireSaveField(field, value)
+    if not Save then return end
+    pcall(function() Save.Watch(field):Fire(value, value) end)
+    pcall(function() Save.Changed:Fire(field, value, value) end)
+end
+
+local function syncEquippedAssets()
+    if not Save then return end
+    local profile = Save.Peek and Save.Peek()
+    if type(profile) ~= "table" then return end
+
+    local eq, seen = {}, {}
+    for _, uid in ipairs(profile.EquippedAssets or {}) do
+        if type(uid) == "string" and uid:sub(1, 4) ~= "FAKE" and not seen[uid] then
+            seen[uid] = true
+            eq[#eq + 1] = uid
+        end
+    end
+    for uid in pairs(fakeEquipped) do
+        if fakeInventory[uid] and not seen[uid] then
+            seen[uid] = true
+            eq[#eq + 1] = uid
+        end
+    end
+
+    profile.EquippedAssets = eq
+    fireSaveField("EquippedAssets", eq)
+end
+
+local function addFakeEquipped(uid)
+    if not uid or not fakeInventory[uid] then return end
+    fakeEquipped[uid] = true
+    syncEquippedAssets()
+end
+
+local function removeFakeEquipped(uid)
+    if not fakeEquipped[uid] then return end
+    fakeEquipped[uid] = nil
+    syncEquippedAssets()
+end
+
+if Save then
+    pcall(function()
+        local profile = Save.Peek and Save.Peek()
+        if type(profile) ~= "table" then return end
+        local clean = {}
+        for _, uid in ipairs(profile.EquippedAssets or {}) do
+            if type(uid) == "string" and uid:sub(1, 4) == "FAKE" then
+                if type(profile.Inventory) == "table" then profile.Inventory[uid] = nil end
+            else
+                clean[#clean + 1] = uid
+            end
+        end
+        profile.EquippedAssets = clean
+    end)
+end
+
+local function refreshFakeInventory()
+    if not Save then return end
+    local profile = Save.Peek and Save.Peek()
+    if type(profile) ~= "table" or type(profile.Inventory) ~= "table" then return end
+
+    local inv = profile.Inventory
+    local changed = false
+
+    for uid, rec in pairs(fakeInventory) do
+        if inv[uid] ~= rec then
+            inv[uid] = rec
+            changed = true
+        end
+    end
+
+    for uid in pairs(inv) do
+        if type(uid) == "string" and uid:sub(1, 8) == "FAKEPET_" and not fakeInventory[uid] then
+            inv[uid] = nil
+            changed = true
+        end
+    end
+
+    if changed then fireSaveField("Inventory", inv) end
+    if syncBackpackVisualSlots then pcall(function() syncBackpackVisualSlots() end) end
+end
+
+syncBackpackVisualSlots = function()
+    local bg = LP.PlayerGui:FindFirstChild("BackpackGui")
+    if not bg then return end
+
+    local sf = bg:FindFirstChild("Backpack")
+    sf = sf and sf:FindFirstChild("Main")
+    sf = sf and sf:FindFirstChild("Inventory")
+    sf = sf and sf:FindFirstChild("ScrollingFrame")
+    if not sf then return end
+
+    for _, child in ipairs(sf:GetChildren()) do
+        if child:GetAttribute("FakePetVisualSlot") then
+            pcall(function() child:Destroy() end)
+        end
+    end
+end
+
+task.delay(1, refreshFakeInventory)
+
+local function inventoryRecord(rec, uid)
+    local d = rec.itemData or {}
+    return {
+        Category = rec.cat,
+        Mutations = d.Mutations or {},
+        BaseMutation = d.BaseMutation,
+        Gender = "Male",
+        EyeColor = d.EyeColor or "e13dba",
+        ColorSeed = d.ColorSeed or 0,
+        ColorIndex = d.ColorIndex or 1,
+        Personality = "Normal",
+        Scale = d.Scale or 1,
+        HasBeenFirstPlaced = true,
+        InFuse = false,
+    }
+end
+
+task.delay(1.5, function()
+    for _, container in ipairs({ LP.Backpack, LP.Character }) do
+        if container then
+            for _, t in ipairs(container:GetChildren()) do
+                if t:IsA("Tool") and t:GetAttribute("FakePetLocal") then
+                    local tracked = false
+                    for _, entry in pairs(fakeToolsList) do
+                        if entry.tool == t then tracked = true break end
+                    end
+                    if not tracked then pcall(function() t:Destroy() end) end
+                end
+            end
+        end
+    end
+end)
+
+local baseMoney = getgenv().FakePetBaseMoney
+if not baseMoney then baseMoney = readRealMoney() getgenv().FakePetBaseMoney = baseMoney end
+local baseSpeedText = getgenv().FakePetBaseSpeedText
+if not baseSpeedText then
+    for _, lbl in ipairs(select(2, realHUDLabels())) do
+        if lbl.Text and lbl.Text ~= "" then baseSpeedText = lbl.Text break end
+    end
+    getgenv().FakePetBaseSpeedText = baseSpeedText
+end
+for _, lbl in ipairs(select(2, realHUDLabels())) do
+    if baseSpeedText then pcall(function() lbl.Text = baseSpeedText end) end
+end
+
+local fakeMoney = baseMoney
+local fakeSpeed = readRealSpeed()
+local spawnCounter = 0
+local slotDropdown 
+
+local settings = {
+    size = 25,             
+    kg = 0,
+    slot = 1,              
+    plotSlot = 1,          
+    overrideHUD = true,   
+    fakeSpeed = false,
+    speedValue = 1e9,      
+    fakeMoneyEnabled = false,
+    moneyValue = 1e9,    
+}
+
+local leaderstats = LP:FindFirstChild("leaderstats")
+local leaderMoney = leaderstats and leaderstats:FindFirstChild("Money/s")
+local leaderSpeed = leaderstats and leaderstats:FindFirstChild("Speed")
+local leaderBase = getgenv().FakePetLeaderstatBase
+if not leaderBase then
+    leaderBase = {
+        moneyRate = leaderMoney and leaderMoney:IsA("ValueBase") and tostring(leaderMoney.Value) or "0",
+        speed = leaderSpeed and leaderSpeed:IsA("ValueBase") and tostring(leaderSpeed.Value) or "",
+    }
+    getgenv().FakePetLeaderstatBase = leaderBase
+end
+
+local currentRate = 0
+local updatingLeader = false
+local leaderMoneyDirty, leaderSpeedDirty = false, false
+
+local function setLeaderValue(obj, txt)
+    if not obj or not obj:IsA("ValueBase") or updatingLeader then return end
+    if tostring(obj.Value) == txt then return end
+    updatingLeader = true
+    pcall(function() obj.Value = txt end)
+    updatingLeader = false
+end
+
+local function syncLeaderMoney(rate)
+    if settings.overrideHUD then
+        setLeaderValue(leaderMoney, compact(math.min(rate or currentRate, MONEY_CAP)))
+        leaderMoneyDirty = true
+    elseif leaderMoneyDirty then
+        setLeaderValue(leaderMoney, leaderBase.moneyRate)
+        leaderMoneyDirty = false
+    end
+end
+
+local function syncLeaderSpeed()
+    if settings.fakeSpeed then
+        setLeaderValue(leaderSpeed, compact(math.min(fakeSpeed, SPEED_CAP)))
+        leaderSpeedDirty = true
+    elseif leaderSpeedDirty then
+        setLeaderValue(leaderSpeed, leaderBase.speed)
+        leaderSpeedDirty = false
+    end
+end
+
+local function updateLeaderstats(rate)
+    syncLeaderMoney(rate)
+    syncLeaderSpeed()
+end
+
+if leaderMoney then
+    track(leaderMoney:GetPropertyChangedSignal("Value"):Connect(function()
+        if updatingLeader then return end
+        if settings.overrideHUD then syncLeaderMoney(currentRate) end
+    end))
+end
+if leaderSpeed then
+    track(leaderSpeed:GetPropertyChangedSignal("Value"):Connect(function()
+        if updatingLeader then return end
+        if settings.fakeSpeed then syncLeaderSpeed() end
+    end))
+end
+
+leaderMoneyDirty = leaderMoney and tostring(leaderMoney.Value) ~= leaderBase.moneyRate or false
+leaderSpeedDirty = leaderSpeed and tostring(leaderSpeed.Value) ~= leaderBase.speed or false
+updateLeaderstats(0)
+
+local labels, labelToCat, seen = {}, {}, {}
+for cat, data in pairs(Assets.Directory) do
+    local label = data.DisplayName or cat
+    if seen[label] then label = label .. " (" .. cat .. ")" end
+    seen[label] = true
+    labels[#labels + 1] = label
+    labelToCat[label] = cat
+end
+table.sort(labels)
+
+local selectedCat, selectedLabel = "Dragon", nil
+for _, label in ipairs(labels) do
+    if labelToCat[label] == "Dragon" then selectedLabel = label break end
+end
+selectedLabel = selectedLabel or labels[1] or "Dragon"
+
+local mutationIds, mutationInfo = {}, {}
+for id, data in pairs(Mutations.All()) do
+    mutationIds[#mutationIds + 1] = id
+    mutationInfo[id] = data.Label or id
+end
+table.sort(mutationIds)
+local activeMutations = {}
+
+local slotValues = {}       
+for i = 0, 20 do slotValues[#slotValues + 1] = tostring(i) end
+local plotSlotValues = {}   
+for i = 1, 20 do plotSlotValues[#plotSlotValues + 1] = tostring(i) end
+
+local function activeList()
+    local out = {}
+    for _, id in ipairs(mutationIds) do
+        if activeMutations[id] then out[#out + 1] = id end
+    end
+    return out
+end
+
+local function scaleFor(cat)
+    local d = Assets.Directory[cat]
+    if settings.kg and settings.kg > 0 then
+        local mw = d and d.ModelWeight or 100
+        return math.clamp((settings.kg / math.max(mw, 1)) ^ (1 / 3), 0.05, 12)
+    end
+    return 0.1 + (settings.size / 25)
+end
+
+local function resolvePlot()
+    if PlotState then
+        local ok, p = pcall(function() return PlotState.ResolvePlot() end)
+        if ok and p and p.PlotFolder then return p end
+    end
+    return nil
+end
+
+local function plotCenter()
+    local p = resolvePlot()
+    if p and p.PlotFolder then
+        local cp = p.PlotFolder:FindFirstChild("CenterPoint")
+        if cp then return cp.Position end
+    end
+    local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    local best, bestDist = nil, math.huge
+    if root and workspace.Plots then
+        for _, plot in ipairs(workspace.Plots:GetChildren()) do
+            local sp = plot:FindFirstChild("SpawnPoint")
+            if sp then
+                local d = (sp.Position - root.Position).Magnitude
+                if d < bestDist then best, bestDist = plot, d end
+            end
+        end
+    end
+    if best then
+        local cp = best:FindFirstChild("CenterPoint")
+        if cp then return cp.Position end
+    end
+    return root and root.Position or Vector3.new(0, 0, 0)
+end
+
+local function plotName()
+    local p = resolvePlot()
+    if p and p.PlotFolder then return tostring(p.PlotFolder.Name) end
+    return "?"
+end
+
+local function nearPlot()
+    local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+
+    if AssetRoster and type(AssetRoster.FindPenArea) == "function" then
+        local ok, pen = pcall(function() return AssetRoster.FindPenArea(LP) end)
+        if ok and pen and pen:IsA("BasePart") then
+            local localPos = pen.CFrame:PointToObjectSpace(root.Position)
+            local half = pen.Size * 0.5
+            local closest = pen.CFrame:PointToWorldSpace(Vector3.new(
+                math.clamp(localPos.X, -half.X, half.X),
+                math.clamp(localPos.Y, -half.Y, half.Y),
+                math.clamp(localPos.Z, -half.Z, half.Z)
+            ))
+            return (root.Position - closest).Magnitude <= 20
+        end
+    end
+
+    return (root.Position - plotCenter()).Magnitude <= 45
+end
+
+local function penBounds()
+    if AssetRoster and type(AssetRoster.FindPenArea) == "function" then
+        local ok, pen = pcall(function() return AssetRoster.FindPenArea(LP) end)
+        if ok and pen and pen:IsA("BasePart") then
+            local halfX = math.max(4, pen.Size.X * 0.5 - 2)
+            local halfZ = math.max(4, pen.Size.Z * 0.5 - 2)
+            return pen.CFrame, halfX, halfZ
+        end
+    end
+    return CFrame.new(plotCenter()), 12, 8
+end
+
+local function groundY(pos)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local filter = { folder }
+    if LP.Character then filter[#filter + 1] = LP.Character end
+    params.FilterDescendantsInstances = filter
+    local hit = workspace:Raycast(pos + Vector3.new(0, 40, 0), Vector3.new(0, -300, 0), params)
+    return hit and hit.Position.Y or (pos.Y - 3)
+end
+
+local function slotPos(slot)
+    local cf, halfX, halfZ = penBounds()
+    local col = (slot - 1) % 5
+    local row = math.floor((slot - 1) / 5)
+    local px = -halfX + (col + 0.5) * (2 * halfX / 5)
+    local pz = -halfZ + (row + 0.5) * (2 * halfZ / 4)
+    local p = cf:PointToWorldSpace(Vector3.new(px, 0, pz))
+    return Vector3.new(p.X, groundY(Vector3.new(p.X, p.Y + 30, p.Z)) + 0.2, p.Z)
+end 
+
+local function patrolPose(slot, t)
+    local cf, halfX, halfZ = penBounds()
+    local margin = 2.5
+    local ax = math.max(1, halfX - margin)
+    local az = math.max(1, halfZ - margin)
+    local seed = (slot - 1) * 1.37
+    local x = math.sin(t + seed) * ax
+    local z = math.sin(t * 0.73 + seed * 1.61 + 1.1) * az
+    local p = cf:PointToWorldSpace(Vector3.new(x, 0, z))
+    return Vector3.new(p.X, groundY(Vector3.new(p.X, p.Y + 30, p.Z)) + 0.2, p.Z)
+end
+
+local function itemDataFor(cat)
+    local muts = activeList()
+    local d = {
+        Category = cat,
+        Mutations = muts,
+        BaseMutation = muts[1],
+        Scale = scaleFor(cat),
+        ColorSeed = 0,
+        ColorIndex = 1,
+        EyeColor = "e13dba",
+        IsFavorite = false,
+        GeneratedMoney = 0,
+    }
+    local ok, w = pcall(function() return AssetItems.WeightKg(d) end)
+    d.Weight = ok and type(w) == "number" and w or 100
+    return d
+end
+
+local function itemDataFromTool(tool)
+    local cat = tool:GetAttribute("Category")
+    if not cat or not Assets.Directory[cat] then cat = selectedCat end
+    local muts = {}
+    for m in tostring(tool:GetAttribute("Mutations") or ""):gmatch("[^,]+") do
+        m = m:match("^%s*(.-)%s*$")
+        if m ~= "" then muts[#muts + 1] = m end
+    end
+    local d = {
+        Category = cat,
+        Mutations = muts,
+        BaseMutation = tool:GetAttribute("BaseMutation") or muts[1],
+        Scale = tonumber(tool:GetAttribute("Scale")) or scaleFor(cat),
+        ColorSeed = tonumber(tool:GetAttribute("ColorSeed")) or 0,
+        ColorIndex = tonumber(tool:GetAttribute("ColorIndex")) or 1,
+        EyeColor = tool:GetAttribute("EyeColor") or "e13dba",
+        IsFavorite = false,
+        GeneratedMoney = 0,
+    }
+    local ok, w = pcall(function() return AssetItems.WeightKg(d) end)
+    d.Weight = ok and type(w) == "number" and w or 100
+    return d
+end
+
+local function rateFor(rec)
+    if rec.rate ~= nil then return rec.rate end
+    local ok, v = pcall(function() return AssetEarnings.LiveRatePerSecond(rec.itemData, nil, nil, LP) end)
+    if not ok or type(v) ~= "number" then
+        local ok2, v2 = pcall(function() return AssetEarnings.RatePerSecond(rec.itemData) end)
+        v = ok2 and type(v2) == "number" and v2 or (Assets.Directory[rec.cat] and Assets.Directory[rec.cat].EarningRate or 0)
+    end
+    rec.rate = v
+    return v
+end
+
+local function pickTarget(rec)
+    local c = plotCenter()
+    local a = math.random() * math.pi * 2
+    local r = math.random() * 10
+    local p = Vector3.new(c.X + math.cos(a) * r, 0, c.Z + math.sin(a) * r)
+    rec.target = Vector3.new(p.X, groundY(Vector3.new(p.X, c.Y + 30, p.Z)) + 0.2, p.Z)
+    rec.wait = math.random() * 15 / 10 + 0.6
+end
+
+local function tuneToolBillboard(inst, name)
+    if not inst then return end
+    local cleanName = name
+    if not cleanName and inst:IsA("Tool") then
+        cleanName = inst:GetAttribute("DisplayName")
+    end
+    if not cleanName and inst:IsA("Model") then
+        local dir = Assets.Directory[inst:GetAttribute("Category") or ""]
+        cleanName = dir and (dir.DisplayName or dir.Name) or nil
+    end
+    for _, d in ipairs(inst:GetDescendants()) do
+        if d:IsA("BillboardGui") then
+            pcall(function() d.Enabled = true end)
+            for _, c in ipairs(d:GetDescendants()) do
+                if c:IsA("TextLabel") then
+                    if c.Name == "DisplayName" and cleanName then
+                        pcall(function()
+                            c.Text = cleanName
+                            c.Visible = true
+                        end)
+                    else
+                        pcall(function() c.Visible = (c.Name == "PerSecond") end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function buildFallbackTool(rec, uid)
+    local tool = Instance.new("Tool")
+    tool.Name = rec.label .. " [Fake]"
+    tool.RequiresHandle = true
+    tool.CanBeDropped = false
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1, 1, 1)
+    handle.Transparency = 1
+    handle.CanCollide = false
+    handle.Parent = tool
+    local ok, rig = pcall(function()
+        return ItemDisplay.CreateWanderingAssetModel(LP.UserId, uid, rec.itemData, tool)
+    end)
+    if ok and rig then pcall(function() rig:PivotTo(CFrame.new(0, -2, 0)) end) end
+    return tool
+end
+
+local spawnRecord
+
+local FULL_MESSAGE = "NO PUEDES PONER MAS PETS EL MAXIMO ES DE 20 SI QUIERES PONER MAS BORRA ALGUNAS"
+
+local function notifyFull()
+    notify({ Title = "Xitado Hub", Content = FULL_MESSAGE, Duration = 5 })
+end
+
+local function nextFreeSlot()
+    local start = math.clamp(settings.slot, 1, 20)
+    for i = 0, 19 do
+        local s = ((start - 1 + i) % 20) + 1
+        if not placed[s] then return s end
+    end
+    return nil
+end
+
+local function recFromInventoryRecord(uid)
+    local r = fakeInventory[uid]
+    if type(r) ~= "table" then return nil end
+    local ok, d = pcall(function() return AssetItems.Decode(r) end)
+    if not ok or type(d) ~= "table" then d = r end
+    local cat = d.Category
+    if not cat or not Assets.Directory[cat] then return nil end
+
+    local itemData = {
+        Category = cat,
+        Mutations = d.Mutations or {},
+        BaseMutation = d.BaseMutation,
+        Scale = d.Scale or 1,
+        ColorSeed = d.ColorSeed or 0,
+        ColorIndex = d.ColorIndex or 1,
+        EyeColor = d.EyeColor or "e13dba",
+        IsFavorite = false,
+        GeneratedMoney = 0,
+    }
+    local okw, w = pcall(function() return AssetItems.WeightKg(itemData) end)
+    itemData.Weight = okw and type(w) == "number" and w or 100
+
+    return {
+        uid = uid,
+        slot = math.clamp(settings.slot, 0, 20),
+        cat = cat,
+        label = Assets.Directory[cat].DisplayName or cat,
+        itemData = itemData,
+    }
+end
+
+local function removeToolByUID(uid, keepRecord)
+    local entry = fakeToolsList[uid]
+    if not entry then return false end
+    if not keepRecord then
+        fakeUIDs[uid] = nil
+        fakeInventory[uid] = nil
+        removeFakeEquipped(uid)
+    end
+    pcall(function() entry.tool:Destroy() end)
+    fakeToolsList[uid] = nil
+    if fakeTools[entry.slot] == entry then fakeTools[entry.slot] = nil end
+    refreshFakeInventory()
+    if keepRecord then syncEquippedAssets() end
+    return true
+end
+
+local function ensureTool(rec, fixedUID)
+    local slot = rec.slot
+    local uid = fixedUID
+    if not uid then
+        bagCounter += 1
+        uid = ("FAKEPET_%d_%d_%d"):format(slot, os.time(), bagCounter)
+    end
+
+    local tool
+    if AssetToolRig then
+        local ok, built = pcall(function() return AssetToolRig.Build(rec.itemData, uid, LP) end)
+        if ok and built and built:IsA("Tool") then tool = built end
+    end
+    if not tool then tool = buildFallbackTool(rec, uid) end
+    if not tool then
+        notify({ Title = "Xitado Hub", Content = "No se pudo crear la mascota visible.", Duration = 3 })
+        return nil
+    end
+
+    fakeUIDs[uid] = true
+    tool:SetAttribute("FakePetLocal", true)
+    tool:SetAttribute("ItemType", "Asset")
+    tool:SetAttribute("UID", uid)
+    tool:SetAttribute("Category", rec.cat)
+    tool:SetAttribute("DisplayName", rec.label)
+    tool:SetAttribute("Mutations", table.concat(rec.itemData.Mutations or {}, ","))
+    tool.Name = rec.label .. " [Fake]"
+    tool.Parent = LP.Backpack
+    local entry = { tool = tool, uid = uid, slot = slot }
+    fakeTools[slot] = entry
+    fakeToolsList[uid] = entry
+
+    if not fakeInventory[uid] then fakeInventory[uid] = inventoryRecord(rec, uid) end
+    refreshFakeInventory()
+
+    track(tool.Equipped:Connect(function()
+     
+        task.defer(function() tuneToolBillboard(tool) end)
+    end))
+    track(tool.Activated:Connect(function()
+    
+        if not nearPlot() then return end
+        if AssetPlacementHints then
+            pcall(function() AssetPlacementHints.ClearFrontPlacement(uid) end)
+        end
+        local data = itemDataFromTool(tool)
+        local s = nextFreeSlot()
+        if not s then
+            notifyFull()
+            return
+        end
+        if spawnRecord(s, data.Category, data, slotPos(s), uid, fakeInventory[uid]) then
+            settings.slot = s
+            settings.plotSlot = s
+            pcall(function() if slotDropdown then slotDropdown:Select(tostring(s)) end end)
+        
+            removeToolByUID(uid, true)
+        end
+    end))
+
+    return tool
+end
+
+local function clearToolsForSlot(slot)
+    local changed = false
+    for uid, entry in pairs(fakeToolsList) do
+        if entry.slot == slot then
+            fakeUIDs[uid] = nil
+            fakeInventory[uid] = nil
+            removeFakeEquipped(uid)
+            pcall(function() entry.tool:Destroy() end)
+            fakeToolsList[uid] = nil
+            if fakeTools[slot] == entry then fakeTools[slot] = nil end
+            changed = true
+        end
+    end
+    if changed then refreshFakeInventory() end
+end
+
+local function removeLastToolForSlot(slot)
+    local found
+    for _, entry in pairs(fakeToolsList) do
+        if entry.slot == slot and (not found or entry.uid > found.uid) then found = entry end
+    end
+    if not found then return false end
+    fakeUIDs[found.uid] = nil
+    fakeInventory[found.uid] = nil
+    removeFakeEquipped(found.uid)
+    pcall(function() found.tool:Destroy() end)
+    fakeToolsList[found.uid] = nil
+    if fakeTools[slot] == found then fakeTools[slot] = nil end
+    refreshFakeInventory()
+    return true
+end
+
+local function clearAllTools()
+    local changed = false
+    for uid, entry in pairs(fakeToolsList) do
+        fakeUIDs[uid] = nil
+        fakeInventory[uid] = nil
+        removeFakeEquipped(uid)
+        pcall(function() entry.tool:Destroy() end)
+        fakeToolsList[uid] = nil
+        changed = true
+    end
+    for k in pairs(fakeTools) do fakeTools[k] = nil end
+    if changed then refreshFakeInventory() end
+end
+
+spawnRecord = function(slot, cat, itemData, pos, uid, existingRecord)
+    if placed[slot] then
+        local old = placed[slot]
+        if old.uid then
+            removeFakeEquipped(old.uid)
+            fakeUIDs[old.uid] = nil
+            fakeInventory[old.uid] = nil
+        end
+        if old.track then pcall(function() old.track:Stop() end) end
+        if old.model then pcall(function() old.model:Destroy() end) end
+    end
+
+    local ok, model = pcall(function()
+        return ItemDisplay.CreateWanderingAssetModel(LP.UserId, "FAKE_" .. spawnCounter, itemData, folder)
+    end)
+    if not ok or not model then
+        notify({ Title = "Xitado Hub", Content = "No se pudo crear el rig: " .. tostring(model), Duration = 4 })
+        return nil
+    end
+    spawnCounter += 1
+
+    local kgLabel
+    if settings.kg and settings.kg > 0 then
+        kgLabel = tostring(math.floor(settings.kg)) .. "Kg"
+    else
+        local ok2, lbl = pcall(function() return AssetItems.WeightLabel(itemData) end)
+        kgLabel = ok2 and lbl or "?"
+    end
+
+    local petUID = uid or ("FAKEPLOT_%d_%d_%d"):format(slot, os.time(), spawnCounter)
+    local rec = {
+        slot = slot,
+        uid = petUID,
+        cat = cat,
+        label = Assets.Directory[cat] and (Assets.Directory[cat].DisplayName or cat) or cat,
+        itemData = itemData,
+        kgLabel = kgLabel,
+        model = model,
+        pos = pos,
+        target = nil,
+        wait = 0,
+        phase = math.random() * math.pi * 2,
+        speed = 0.12 + math.random() * 0.06,
+        track = nil,
+    }
+    placed[slot] = rec
+
+    fakeUIDs[petUID] = true
+    fakeInventory[petUID] = existingRecord or inventoryRecord(rec, petUID)
+    addFakeEquipped(petUID)
+    refreshFakeInventory()
+
+    pcall(function() model:PivotTo(CFrame.new(pos)) end)
+
+    pcall(function()
+        ItemDisplay.CreateDataBillboard(model, cat, itemData, rateFor(rec))
+        tuneToolBillboard(model, rec.label)
+    end)
+
+    pickTarget(rec)
+
+    pcall(function()
+        local inner = model:FindFirstChild("Model")
+        local ctrl = inner and inner:FindFirstChildWhichIsA("AnimationController")
+        if ctrl then
+            local animator = ctrl:FindFirstChildOfClass("Animator") or Instance.new("Animator", ctrl)
+            local idle = Assets.Directory[cat].Animations and Assets.Directory[cat].Animations.Idle
+            if idle then
+                rec.track = animator:LoadAnimation(idle)
+                rec.track.Looped = true
+                rec.track:Play()
+            end
+        end
+    end)
+
+    return rec
+end
+
+local function consumeBagTool(cat)
+    local chosen
+    for uid, entry in pairs(fakeToolsList) do
+        if (not cat or entry.cat == cat or (entry.tool and entry.tool:GetAttribute("Category") == cat))
+            and (not chosen or uid > chosen) then
+            chosen = uid
+        end
+    end
+    if chosen then removeToolByUID(chosen) end
+    return chosen ~= nil
+end
+
+local function placeSelected()
+    local slot = nextFreeSlot()
+    if not slot then
+        notifyFull()
+        return nil
+    end
+    local cat = selectedCat
+    if not Assets.Directory[cat] then return end
+    local rec = spawnRecord(slot, cat, itemDataFor(cat), slotPos(slot))
+    if rec then
+        settings.slot = slot
+        settings.plotSlot = slot
+        pcall(function() if slotDropdown then slotDropdown:Select(tostring(slot)) end end)
+    
+        consumeBagTool(cat)
+        notify({
+            Title = "Xitado Hub",
+            Content = rec.label .. " -> slot " .. slot .. " | " .. compact(rateFor(rec)) .. "/s",
+            Duration = 3,
+        })
+    end
+    return rec
+end
+
+local function placeAllSlots()
+    if not nextFreeSlot() then
+        notifyFull()
+        return
+    end
+    local cat = selectedCat
+    if not Assets.Directory[cat] then return end
+    local count = 0
+    for slot = 1, 20 do
+        if spawnRecord(slot, cat, itemDataFor(cat), slotPos(slot)) then count += 1 end
+    end
+    notify({
+        Title = "Xitado Hub",
+        Content = (Assets.Directory[cat].DisplayName or cat) .. " -> " .. count .. " slots.",
+        Duration = 3,
+    })
+end
+
+local function makeToolForSelected()
+    local slot = math.clamp(settings.slot, 0, 20)
+    local cat = selectedCat
+    if not Assets.Directory[cat] then return end
+    local data = itemDataFor(cat)
+    local rec = {
+        slot = slot,
+        cat = cat,
+        label = Assets.Directory[cat].DisplayName or cat,
+        itemData = data,
+    }
+    local tool = ensureTool(rec)
+    if tool then
+        local count = 0
+        for _ in pairs(fakeToolsList) do count += 1 end
+        notify({ Title = "Xitado Hub", Content = rec.label .. " agregada a la mochila (" .. count .. ").", Duration = 3 })
+    end
+    return tool
+end
+
+local function removeBagToolSelected()
+    local slot = math.clamp(settings.slot, 0, 20)
+    if removeLastToolForSlot(slot) then
+        notify({ Title = "Xitado Hub", Content = "Mascota quitada de la mochila.", Duration = 2 })
+    else
+        notify({ Title = "Xitado Hub", Content = "No hay mascotas en ese slot de la mochila.", Duration = 2 })
+    end
+end
+
+local function removeAllBagTools()
+    local count = 0
+    for _ in pairs(fakeToolsList) do count += 1 end
+    clearAllTools()
+    notify({ Title = "Xitado Hub", Content = "Se quitaron " .. count .. " mascotas de la mochila.", Duration = 2 })
+end
+
+local function removeSlot(slot)
+    local rec = placed[slot]
+    if not rec then
+        notify({ Title = "Xitado Hub", Content = "Slot " .. slot .. " vacio.", Duration = 2 })
+        return
+    end
+    if rec.uid then
+        removeFakeEquipped(rec.uid)
+        fakeUIDs[rec.uid] = nil
+        fakeInventory[rec.uid] = nil
+    end
+    if rec.track then pcall(function() rec.track:Stop() end) end
+    if rec.model then pcall(function() rec.model:Destroy() end) end
+    clearToolsForSlot(slot)
+    placed[slot] = nil
+    refreshFakeInventory()
+    notify({ Title = "Xitado Hub", Content = "Slot " .. slot .. " limpio.", Duration = 2 })
+end
+
+local function clearAll()
+    for slot, rec in pairs(placed) do
+        if rec.uid then
+            removeFakeEquipped(rec.uid)
+            fakeUIDs[rec.uid] = nil
+            fakeInventory[rec.uid] = nil
+        end
+        if rec.track then pcall(function() rec.track:Stop() end) end
+        if rec.model then pcall(function() rec.model:Destroy() end) end
+        placed[slot] = nil
+    end
+    clearAllTools()
+    refreshFakeInventory()
+    notify({ Title = "Xitado Hub", Content = "Todo limpiado.", Duration = 2 })
+end
+
+local function returnPlacedPetToBag(uid)
+    local recData = recFromInventoryRecord(uid)
+    if not recData then return false end
+    local tool = ensureTool(recData, uid)
+    return tool ~= nil
+end
+
+if AssetRoster and type(AssetRoster) == "table" and type(AssetRoster.WearAsset) == "function" then
+    local original = getgenv().FakePetOriginalWearAsset or AssetRoster.WearAsset
+    getgenv().FakePetOriginalWearAsset = original
+    AssetRoster.WearAsset = function(uid)
+        if fakeUIDs[uid] then return false, nil end
+        return original(uid)
+    end
+end
+
+if AssetRoster and type(AssetRoster) == "table" and type(AssetRoster.DoffAsset) == "function" then
+    local original = getgenv().FakePetOriginalDoffAsset or AssetRoster.DoffAsset
+    getgenv().FakePetOriginalDoffAsset = original
+    AssetRoster.DoffAsset = function(uid)
+        if fakeUIDs[uid] then
+            if fakeEquipped[uid] then
+                for slot, rec in pairs(placed) do
+                    if rec.uid == uid then
+                        if rec.track then pcall(function() rec.track:Stop() end) end
+                        if rec.model then pcall(function() rec.model:Destroy() end) end
+                        placed[slot] = nil
+                        break
+                    end
+                end
+                removeFakeEquipped(uid)
+                pcall(function() returnPlacedPetToBag(uid) end)
+                refreshFakeInventory()
+            end
+            return true, nil
+        end
+        return original(uid)
+    end
+end
+
+local updatingHUD = false
+local hudLabels = {}
+
+local function updateRealHUD()
+    local moneyLabels, speedLabels = realHUDLabels()
+
+    if settings.overrideHUD then
+        local txt = "$" .. compact(math.min(fakeMoney, MONEY_CAP))
+        for _, lbl in ipairs(moneyLabels) do
+            if not updatingHUD then pcall(function() lbl.Text = txt end) end
+        end
+    end
+
+    if settings.fakeSpeed then
+        local txt = compact(math.min(fakeSpeed, SPEED_CAP))
+        for _, lbl in ipairs(speedLabels) do
+            if not updatingHUD then pcall(function() lbl.Text = txt end) end
+        end
+    end
+end
+
+local function watchRealHUD()
+    local moneyLabels, speedLabels = realHUDLabels()
+    for _, lbl in ipairs(moneyLabels) do
+        if not hudLabels[lbl] then
+            hudLabels[lbl] = "money"
+            track(lbl:GetPropertyChangedSignal("Text"):Connect(function()
+                if updatingHUD or not settings.overrideHUD then return end
+                updatingHUD = true
+                pcall(function() lbl.Text = "$" .. compact(math.min(fakeMoney, MONEY_CAP)) end)
+                updatingHUD = false
+            end))
+        end
+    end
+    for _, lbl in ipairs(speedLabels) do
+        if not hudLabels[lbl] then
+            hudLabels[lbl] = "speed"
+            track(lbl:GetPropertyChangedSignal("Text"):Connect(function()
+                if updatingHUD or not settings.fakeSpeed then return end
+                updatingHUD = true
+                pcall(function() lbl.Text = compact(math.min(fakeSpeed, SPEED_CAP)) end)
+                updatingHUD = false
+            end))
+        end
+    end
+end
+watchRealHUD()
+pcall(function() RunService:UnbindFromRenderStep("XitadoHubHUD") end)
+RunService:BindToRenderStep("XitadoHubHUD", Enum.RenderPriority.Last.Value + 100, updateRealHUD)
+
+local hudTick = 0
+local toolTick = 0
+track(RunService.RenderStepped:Connect(function(dt)
+    local rate = 0
+    local t = os.clock()
+
+    for slot, rec in pairs(placed) do
+        if rec.model and rec.model.Parent then
+            rate += rateFor(rec)
+            local cur = rec.model:GetPivot()
+            local moveT = t * rec.speed + rec.phase
+            local target = patrolPose(slot, moveT)
+            local ahead = patrolPose(slot, moveT + 0.12)
+            local dir = Vector3.new(ahead.X - target.X, 0, ahead.Z - target.Z)
+            if dir.Magnitude < 0.01 then dir = cur.LookVector end
+            target = target + Vector3.new(0, math.sin(t * 1.6 + rec.phase) * 0.04, 0)
+            local face = CFrame.lookAt(target, target + dir)
+            pcall(function() rec.model:PivotTo(cur:Lerp(face, math.clamp(dt * 2.5, 0, 1))) end)
+        else
+            placed[slot] = nil
+        end
+    end
+
+    currentRate = rate
+    updateLeaderstats(rate)
+
+    if settings.overrideHUD then
+        fakeMoney = math.min(fakeMoney + rate * dt, MONEY_CAP)
+    end
+
+    toolTick += dt
+    if toolTick >= 0.5 then
+        toolTick = 0
+        refreshFakeInventory()
+        for _, entry in pairs(fakeToolsList) do
+            if entry.tool and entry.tool.Parent == LP.Character then tuneToolBillboard(entry.tool) end
+        end
+       
+        for _, container in ipairs({ LP.Backpack, LP.Character }) do
+            if container then
+                for _, t in ipairs(container:GetChildren()) do
+                    if t:IsA("Tool") and t:GetAttribute("FakePetLocal") then
+                        local tracked = false
+                        for _, entry in pairs(fakeToolsList) do
+                            if entry.tool == t then tracked = true break end
+                        end
+                        if not tracked then pcall(function() t:Destroy() end) end
+                    end
+                end
+            end
+        end
+    end
+
+    hudTick += dt
+    if hudTick >= 0.1 then
+        hudTick = 0
+        watchRealHUD()
+    end
+end))
+
+track(UIS.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.N then
+        placeSelected()
+    elseif input.KeyCode == Enum.KeyCode.B then
+        removeSlot(math.clamp(settings.slot, 0, 20))
+    end
+end))
+
+local Window = WindUI:CreateWindow({
+    Title = "Xitado Hub",
+    Author = "Solo Tu lo Ves!!! Fotos, Live Etc...",
+    Folder = "XitadoHub",
+    Size = UDim2.fromOffset(560, 460),
+    MinSize = Vector2.new(460, 360),
+    Theme = "Dark",
+    ToggleKey = Enum.KeyCode.M,
+})
+
+local TabPets = Window:Tab({ Title = "Mascotas" })
+local TabMuts = Window:Tab({ Title = "Mutaciones" })
+local TabSize = Window:Tab({ Title = "Tamaño" })
+local TabSpeed = Window:Tab({ Title = "Velocidad" })
+
+TabPets:Dropdown({
+    Title = "Mascotas",
+    Values = labels,
+    Value = selectedLabel,
+    SearchBarEnabled = true,
+    Callback = function(value)
+        selectedLabel = value
+        selectedCat = labelToCat[value] or selectedCat
+    end,
+})
+
+TabPets:Button({
+    Title = "Poner En Parcela",
+    Desc = "Se pone en el slot seleccionado",
+    Callback = function() placeSelected() end,
+})
+
+TabPets:Button({
+    Title = "Poner En La Mochila",
+    Callback = function() makeToolForSelected() end,
+})
+
+TabPets:Button({
+    Title = "Quitar De La Mochila",
+    Callback = function() removeBagToolSelected() end,
+})
+
+TabPets:Button({
+    Title = "Quitar Todo De La Mochila",
+    Callback = function() removeAllBagTools() end,
+})
+
+TabPets:Button({
+    Title = "Quitar Todo",
+    Callback = function() clearAll() end,
+})
+
+TabPets:Button({
+    Title = "Quitar Slot Seleccionado",
+    Callback = function() removeSlot(math.clamp(settings.slot, 0, 20)) end,
+})
+
+slotDropdown = TabPets:Dropdown({
+    Title = "Slot",
+    Values = slotValues,
+    Value = "1",
+    Callback = function(value) settings.slot = tonumber(value) or 1 end,
+})
+
+TabPets:Button({
+    Title = "Poner en todos los slots",
+    Callback = function() placeAllSlots() end,
+})
+
+local moneyHudToggle
+local moneyFakeToggle
+local speedToggle
+local speedInput
+local moneyInput
+
+local function setInputText(element, text)
+    if not element then return end
+    pcall(function() element:Set(text) end)
+    pcall(function() element:SetValue(text) end)
+end
+
+local resettingMoney = false
+local function resetMoney()
+    if resettingMoney then return end
+    resettingMoney = true
+    fakeMoney = baseMoney
+    settings.fakeMoneyEnabled = false
+    settings.overrideHUD = false
+    pcall(function() if moneyFakeToggle then moneyFakeToggle:Set(false) end end)
+    pcall(function() if moneyHudToggle then moneyHudToggle:Set(false) end end)
+    updateLeaderstats(0)
+    resettingMoney = false
+end
+
+local function raiseMoney()
+    settings.overrideHUD = true
+    pcall(function() if moneyHudToggle then moneyHudToggle:Set(true) end end)
+    pcall(function() if moneyFakeToggle then moneyFakeToggle:Set(true) end end)
+end
+
+local mutToggles = {}
+local function setAllMutations(value)
+    for id, el in pairs(mutToggles) do
+        if value then activeMutations[id] = true else activeMutations[id] = nil end
+        pcall(function() el:Set(value) end)
+    end
+end
+
+TabMuts:Button({
+    Title = "Aplicar todas",
+    Callback = function() setAllMutations(true) end,
+})
+
+TabMuts:Button({
+    Title = "Quitar todas",
+    Callback = function() setAllMutations(false) end,
+})
+
+for _, id in ipairs(mutationIds) do
+    mutToggles[id] = TabMuts:Toggle({
+        Title = mutationInfo[id],
+        Value = false,
+        Callback = function(v)
+            if v then activeMutations[id] = true else activeMutations[id] = nil end
+        end,
+    })
+end
+
+TabSize:Input({
+    Title = "Tamaño (KG)",
+    Placeholder = "Ej: 500",
+    Value = "0",
+    Callback = function(text)
+        local n = tonumber((tostring(text):gsub("[^%d%.]", "")))
+        settings.kg = n or 0
+    end,
+})
+
+speedToggle = TabSpeed:Toggle({
+    Title = "Activar Velocidad",
+    Value = false,
+    Callback = function(v)
+        settings.fakeSpeed = v
+        if v then
+            fakeSpeed = math.min(settings.speedValue, SPEED_CAP)
+        else
+            fakeSpeed = readRealSpeed()
+            for _, lbl in ipairs(select(2, realHUDLabels())) do
+                pcall(function() lbl.Text = baseSpeedText or compact(fakeSpeed) end)
+            end
+        end
+        syncLeaderSpeed()
+    end,
+})
+
+speedInput = TabSpeed:Input({
+    Title = "Velocidad",
+    Placeholder = "1B",
+    Value = compact(settings.speedValue),
+    Callback = function(text)
+        local n = parseCompact(text)
+        if n then
+            settings.speedValue = math.clamp(n, 0, SPEED_CAP)
+            if settings.fakeSpeed then fakeSpeed = settings.speedValue end
+        else
+            notify({ Title = "Xitado Hub", Content = "Velocidad no valida. Ej: 1B, 120Qa", Duration = 3 })
+        end
+    end,
+})
+
+moneyFakeToggle = TabSpeed:Toggle({
+    Title = "Activar dinero",
+    Value = false,
+    Callback = function(v)
+        settings.fakeMoneyEnabled = v
+        if v then
+            settings.overrideHUD = true
+            fakeMoney = math.min(settings.moneyValue, MONEY_CAP)
+            pcall(function() if moneyHudToggle then moneyHudToggle:Set(true) end end)
+        else
+            fakeMoney = baseMoney
+        end
+    end,
+})
+
+moneyInput = TabSpeed:Input({
+    Title = "Dinero",
+    Placeholder = "1B",
+    Value = compact(settings.moneyValue),
+    Callback = function(text)
+        local n = parseCompact(text)
+        if n then
+            settings.moneyValue = math.clamp(n, 0, MONEY_CAP)
+            if settings.fakeMoneyEnabled then fakeMoney = settings.moneyValue end
+        else
+            notify({ Title = "Xitado Hub", Content = "Dinero no valido. Ej: 1B, 120Qi", Duration = 3 })
+        end
+    end,
+})
+
+moneyHudToggle = TabSpeed:Toggle({
+    Title = "Subir Dinero (falso)",
+    Desc = "de las pets q spawnes ese dinero te dara",
+    Value = true,
+    Callback = function(v)
+        if resettingMoney then return end
+        settings.overrideHUD = v
+        if not v then
+            resetMoney()
+        elseif settings.fakeMoneyEnabled then
+            fakeMoney = math.min(settings.moneyValue, MONEY_CAP)
+        end
+    end,
+})
+
+TabSpeed:Button({
+    Title = "Reiniciar Dinero",
+    Callback = function() resetMoney() end,
+})
+
+local placeSignal = Instance.new("BindableEvent")
+placeSignal.Event:Connect(function() placeSelected() end)
+local clearSignal = Instance.new("BindableEvent")
+clearSignal.Event:Connect(function() clearAll() end)
+local toolSignal = Instance.new("BindableEvent")
+toolSignal.Event:Connect(function() makeToolForSelected() end)
+local allSignal = Instance.new("BindableEvent")
+allSignal.Event:Connect(function() placeAllSlots() end)
+
+local function apiNumber(v)
+    return parseCompact(tostring(v)) or tonumber(v) or 0
+end
+
+local speedSignal = Instance.new("BindableEvent")
+speedSignal.Event:Connect(function(v)
+    settings.speedValue = math.clamp(apiNumber(v), 0, SPEED_CAP)
+    setInputText(speedInput, compact(settings.speedValue))
+    pcall(function() if speedToggle then speedToggle:Set(settings.speedValue > 0) end end)
+    settings.fakeSpeed = settings.speedValue > 0
+    fakeSpeed = settings.speedValue
+end)
+
+local moneySignal = Instance.new("BindableEvent")
+moneySignal.Event:Connect(function(v)
+    settings.moneyValue = math.clamp(apiNumber(v), 0, MONEY_CAP)
+    setInputText(moneyInput, compact(settings.moneyValue))
+    pcall(function() if moneyFakeToggle then moneyFakeToggle:Set(true) end end)
+    settings.fakeMoneyEnabled = true
+    settings.overrideHUD = true
+    fakeMoney = settings.moneyValue
+end)
+
+local resetMoneySignal = Instance.new("BindableEvent")
+resetMoneySignal.Event:Connect(function() resetMoney() end)
+local raiseMoneySignal = Instance.new("BindableEvent")
+raiseMoneySignal.Event:Connect(function() raiseMoney() end)
+
+getgenv().FakePetAPI = {
+    placeSignal = placeSignal,
+    clearSignal = clearSignal,
+    toolSignal = toolSignal,
+    allSignal = allSignal,
+    speedSignal = speedSignal,
+    moneySignal = moneySignal,
+    resetMoneySignal = resetMoneySignal,
+    raiseMoneySignal = raiseMoneySignal,
+    place = placeSelected,
+    clear = clearAll,
+    remove = removeSlot,
+    placeAll = placeAllSlots,
+    makeTool = makeToolForSelected,
+    removeBag = removeBagToolSelected,
+    removeAllBag = removeAllBagTools,
+    placed = placed,
+    tools = fakeTools,
+    toolsList = fakeToolsList,
+    bagCount = function()
+        local n = 0
+        for _ in pairs(fakeToolsList) do n += 1 end
+        return n
+    end,
+    window = Window,
+    fakeUIDs = fakeUIDs,
+    fakeInventory = fakeInventory,
+    fakeEquipped = fakeEquipped,
+    nearPlot = nearPlot,
+    syncEquippedAssets = syncEquippedAssets,
+    equipFake = function(uid)
+        local entry = fakeToolsList[uid]
+        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if not entry or not hum then return false end
+        pcall(function() hum:EquipTool(entry.tool) end)
+        return entry.tool.Parent == LP.Character
+    end,
+    unequipFake = function(uid)
+        if not AssetRoster then return false end
+        local ok, result = pcall(function() return AssetRoster.DoffAsset(uid) end)
+        return ok and result == true or false
+    end,
+    settings = settings,
+    mutations = activeMutations,
+    toggles = { speed = speedToggle, money = moneyFakeToggle, moneyHud = moneyHudToggle },
+    inputs = { speed = speedInput, money = moneyInput },
+    money = function() return fakeMoney end,
+    speed = function() return fakeSpeed end,
+    plot = plotName,
+    baseMoney = baseMoney,
+    compact = compact,
+    parse = parseCompact,
+    refreshInventory = refreshFakeInventory,
+    nextFreeSlot = nextFreeSlot,
+    removeToolByUID = removeToolByUID,
+    consumeBagTool = consumeBagTool,
+    tuneToolBillboard = tuneToolBillboard,
+    slotDropdown = slotDropdown,
+    fullMessage = FULL_MESSAGE,
+}
