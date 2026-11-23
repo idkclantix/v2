@@ -70,7 +70,9 @@ local Locale = {
         SecSilentAim="Silent Aim", SilentAim="Silent Aim",
         SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Invisible Hitbox",
         SecLegit="Legit", Macro="Macro", TriggerBot="TriggerBot", Aimbot="Aimbot",
-        NotifyLang="Language applied.",
+        NotifyLang="Language applied.", NotifyAura="Haz click 1 vez", Wand="Varita",
+        Farm="Farm", Tool="Tool", RestoreThings="Restore Things",
+        AutoFarm="Auto Farm", KnifeAura="Knife Aura",
     },
     es = {
         TabMain="Principal", TabEsp="Esp", TabMods="Modificaciones", TabExtras="Extras", TabBotones="Botones", TabAnims="Animaciones",
@@ -102,7 +104,9 @@ local Locale = {
         SecSilentAim="Apuntado Silencioso", SilentAim="Apuntado Silencioso",
         SecHitbox="Hitbox", Hitbox="Hitbox", HitboxInvisible="Hitbox Invisible",
         SecLegit="Legit", Macro="Macro", TriggerBot="Disparador Automático", Aimbot="Aimbot",
-        NotifyLang="Idioma aplicado.",
+        NotifyLang="Idioma aplicado.", NotifyAura="Haz click 1 vez", Wand="Varita",
+        Farm="Farm", Tool="Tool", RestoreThings="restaurar cosas",
+        AutoFarm="Auto Farm", KnifeAura="Knife Aura",
     },
 }
 
@@ -206,6 +210,79 @@ assert(Window, "[Xitado] WindUI CreateWindow returned nil")
 if getgenv then getgenv().XitadoWindow = Window end
 
 pcall(function() if Window.Open then Window:Open() end end)
+
+-- Notificaciones: esta version de WindUI no expone Window.Notify, asi que se
+-- intenta la API de la libreria y, si no aparece el texto, se muestra un aviso propio.
+local function showNotice(text, title)
+    text = tostring(text or "")
+    title = tostring(title or "Xitado Hub")
+    local roots = { CoreGui }
+    pcall(function()
+        if gethui then local h = gethui(); if h then roots[#roots+1] = h end end
+        local pg = player:FindFirstChildOfClass("PlayerGui"); if pg then roots[#roots+1] = pg end
+    end)
+    local function noticeShown()
+        for _, root in ipairs(roots) do
+            if root then
+                for _, o in ipairs(root:GetDescendants()) do
+                    if o:IsA("TextLabel") and tostring(o.Text or "") == text then return true end
+                end
+            end
+        end
+        return false
+    end
+    local okApi = false
+    pcall(function()
+        if WindUI and type(WindUI.Notify) == "function" then
+            WindUI:Notify({ Title = title, Content = text, Duration = 3 }); okApi = true
+        elseif Window and type(Window.Notify) == "function" then
+            Window:Notify({ Title = title, Content = text, Duration = 3 }); okApi = true
+        end
+    end)
+    task.delay(0.25, function()
+        if destroyed or (okApi and noticeShown()) then return end
+        pcall(function()
+            local gui = Instance.new("ScreenGui")
+            gui.Name = "XitadoAuraNotify"
+            gui.ResetOnSpawn = false
+            gui.IgnoreGuiInset = true
+            local hOk, h = pcall(function() return gethui and gethui() end)
+            gui.Parent = (hOk and h) or CoreGui
+            local box = Instance.new("Frame")
+            box.Name = "Box"
+            box.Size = UDim2.fromOffset(300, 62)
+            box.Position = UDim2.new(1, -320, 0, 96)
+            box.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+            box.BorderSizePixel = 0
+            box.Parent = gui
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(90, 90, 90)
+            stroke.Thickness = 1
+            stroke.Parent = box
+            local titleLabel = Instance.new("TextLabel")
+            titleLabel.Size = UDim2.new(1, -16, 0, 22)
+            titleLabel.Position = UDim2.new(0, 8, 0, 5)
+            titleLabel.BackgroundTransparency = 1
+            titleLabel.Text = title
+            titleLabel.TextColor3 = Color3.fromRGB(168, 199, 250)
+            titleLabel.Font = Enum.Font.GothamBold
+            titleLabel.TextSize = 15
+            titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+            titleLabel.Parent = box
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, -16, 0, 28)
+            label.Position = UDim2.new(0, 8, 0, 27)
+            label.BackgroundTransparency = 1
+            label.Text = text
+            label.TextColor3 = Color3.new(1, 1, 1)
+            label.Font = Enum.Font.GothamBold
+            label.TextSize = 19
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.Parent = box
+            task.delay(3, function() pcall(function() gui:Destroy() end) end)
+        end)
+    end)
+end
 
 -- Helpers de texto/nieve: se usan solo aqui
 do
@@ -369,7 +446,7 @@ local autoKillState, activeESPs, buttonOrder -- compartidos con el aimbot intern
 local legitConns, macroTouch
 local isEnemy, esCompaneroDeEquipo, esPistola, esCuchillo, oldNamecallHook, esEnemigoValido, obtenerPistola, estaEnLobby
 local invisState, setInvisible
-local autoEventFarm
+local autoEventFarm, FarmCtl
 
 -- Todo el combate corre en su propio scope para no agotar los 200 registers del chunk principal
 local function setupCombat()
@@ -399,18 +476,6 @@ auraEnabled = false
 auraRemote  = nil
 
 local UIElements = {}
-
-local COLORES_NEUTROS = {
-    ["White"] = true,
-    ["Medium stone grey"] = true,
-    ["Medium Stone Grey"] = true,
-    ["Really black"] = true,
-    ["Really Black"] = true,
-    ["Institutional white"] = true,
-    ["Institutional White"] = true,
-    ["Ghost grey"] = true,
-    ["Ghost Grey"] = true,
-}
 
 local function esColorVerde(c)
     if typeof(c) ~= "Color3" then return false end
@@ -565,14 +630,6 @@ local function resolvePlayerTeam(plr)
     return nil
 end
 
-local function isInMyMatch(targetPlayer)
-    if not targetPlayer then return false end
-    local myMatch = player:GetAttribute("MatchId")
-    local theirMatch = targetPlayer:GetAttribute("MatchId")
-    if not myMatch or myMatch == "" or not theirMatch or theirMatch == "" then return true end
-    return myMatch == theirMatch
-end
-
 local function isAlly(target)
     if not target or target == player then return false end
     local myMatch = player:GetAttribute("MatchId")
@@ -605,6 +662,25 @@ estaEnLobby = function()
         local tName = string.lower(player.Team.Name)
         if string.find(tName, "lobby") or string.find(tName, "spectat") or string.find(tName, "espectador") or string.find(tName, "menu") or string.find(tName, "dead") then
             return true
+        end
+    end
+    -- En el lobby el menu de matchmaking muestra el cartel PLAY / JUGAR.
+    local pg = player:FindFirstChildOfClass("PlayerGui")
+    local mm = pg and pg:FindFirstChild("Matchmaking")
+    if mm then
+        for _, o in ipairs(mm:GetDescendants()) do
+            if o:IsA("TextLabel") then
+                local vis, cur = true, o
+                while cur do
+                    if cur:IsA("GuiObject") and not cur.Visible then vis = false; break end
+                    if cur:IsA("ScreenGui") and not cur.Enabled then vis = false; break end
+                    cur = cur.Parent
+                end
+                if vis then
+                    local t = tostring(o.Text or ""):upper():gsub("%s", "")
+                    if t == "PLAY" or t == "JUGAR" then return true end
+                end
+            end
         end
     end
     return false
@@ -666,7 +742,7 @@ esPistola = function(item)
     if item:FindFirstChild("Throw", true) or item:FindFirstChild("KnifeClient", true) or item:FindFirstChild("KnifeServer", true) then return false end
     if esCuchillo(item) then return false end
     local nombre = string.lower(item.Name)
-    local ignorar = {"combat", "fist", "wallet", "phone", "punch", "boombox", "radio", "knife", "blade", "cuchillo", "dagger", "kunai", "sword", "toy", "juguete", "pizza", "burger", "teddy", "balloon", "drink", "food"}
+    local ignorar = {"combat", "fist", "wallet", "phone", "punch", "boombox", "radio", "knife", "blade", "cuchillo", "dagger", "kunai", "sword", "toy", "juguete", "pizza", "burger", "teddy", "balloon", "drink", "food", "varita", "wand", "palo", "stick"}
     for _, palabra in ipairs(ignorar) do if string.find(nombre, palabra) then return false end end
     return true
 end
@@ -850,7 +926,7 @@ task.spawn(function()
                         end
                     else
                         local hitbox = character:FindFirstChild("AgresivoHitbox")
-                        if hitbox then hitbox.Destroy() end
+                        if hitbox then hitbox:Destroy() end
                     end
                 end
             else
@@ -1387,6 +1463,17 @@ UIElements.TogKnifeOnly = regUI(TabMain:Toggle({
 legitToggles.GunOnly = UIElements.TogGunOnly
 legitToggles.KnifeOnly = UIElements.TogKnifeOnly
 
+-- Farm: una sola opcion, Auto Farm (instantaneo). Nunca se activa solo.
+regUI(TabMain:Section({ Title = T("Farm"), Opened = true }), "Farm")
+
+UIElements.TogAutoFarm = regUI(TabMain:Toggle({
+    Title = T("AutoFarm"),
+    Value = false,
+    Callback = function(Value)
+        FarmCtl.SetInstant(Value)
+    end,
+}), "AutoFarm")
+
 local SILENT_BULLET_SPEED = 99999
 local SILENT_MAX_LEAD_VEL = 0
 local SILENT_MIN_DIR      = 20 -- 01rox: solo redirige disparos reales, no raycasts de camara
@@ -1642,8 +1729,9 @@ task.spawn(function()
     end
 end)
 
--- Autofarm del reference: arranca automaticamente cada vez que entra en partida
-autoEventFarm = { Active = false, Remote = nil, Running = false }
+-- Auto Farm OPCIONAL: una sola opcion (instantanea), nunca se activa solo.
+-- Se controla desde la UI (Farm) o con getgenv().XitadoFarm.
+autoEventFarm = { Active = false, Remote = nil, Gen = 0 }
 
 local function getEventRemote()
     if autoEventFarm.Remote and autoEventFarm.Remote.Parent then return autoEventFarm.Remote end
@@ -1674,46 +1762,48 @@ local function collectEventObj(obj)
     end
 end
 
-local function runEventFarmLoop()
-    if autoEventFarm.Running then return end
-    autoEventFarm.Running = true
-    task.spawn(function()
-        getEventRemote()
-        while autoEventFarm.Active and not destroyed do
-            pcall(function()
-                local char = player.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-                local container = Workspace:FindFirstChild("SpawnablesClient")
-                if not container then return end
-                for _, obj in ipairs(container:GetChildren()) do
-                    if not autoEventFarm.Active or destroyed then break end
-                    if obj:IsA("Model") or obj:IsA("BasePart") then
-                        collectEventObj(obj)
-                        task.wait(0.02)
-                    end
-                end
-            end)
-            task.wait(0.05)
+local function collectAllSpawnables()
+    if destroyed or estaEnLobby() then return end
+    local container = Workspace:FindFirstChild("SpawnablesClient")
+    if not container then return end
+    getEventRemote()
+    for _, obj in ipairs(container:GetChildren()) do
+        if not autoEventFarm.Active or destroyed then break end
+        if obj:IsA("Model") or obj:IsA("BasePart") then
+            collectEventObj(obj)
+            task.wait(0.01)
         end
-        autoEventFarm.Running = false
+    end
+end
+
+local function startFarmLoop()
+    autoEventFarm.Gen = autoEventFarm.Gen + 1
+    local gen = autoEventFarm.Gen
+    task.spawn(function()
+        while gen == autoEventFarm.Gen and autoEventFarm.Active and not destroyed do
+            pcall(collectAllSpawnables)
+            task.wait(0.15) -- barre todo de una al instante
+        end
     end)
 end
 
-task.spawn(function()
-    local wasInMatch = false
-    while not destroyed do
-        local inMatch = IsInMatchStrict()
-        if inMatch and not wasInMatch then
-            autoEventFarm.Active = true
-            runEventFarmLoop()
-        elseif not inMatch and wasInMatch then
-            autoEventFarm.Active = false
-        end
-        wasInMatch = inMatch
-        task.wait(1)
-    end
-end)
+FarmCtl = {}
+
+function FarmCtl.Stop()
+    autoEventFarm.Active = false
+    autoEventFarm.Gen = autoEventFarm.Gen + 1
+end
+
+function FarmCtl.SetInstant(on)
+    on = on == true
+    if not on then FarmCtl.Stop(); return end
+    autoEventFarm.Active = true
+    startFarmLoop()
+end
+
+function FarmCtl.IsActive() return autoEventFarm.Active end
+
+if getgenv then getgenv().XitadoFarm = FarmCtl end
 
 end
 
@@ -1938,8 +2028,12 @@ local function createNameESP(targetPlayer)
     return nameGui, nameLabel, studsLabel
 end
 
-espConnection = RunService.RenderStepped:Connect(function()
+local espAcc = 0
+espConnection = RunService.RenderStepped:Connect(function(dt)
     if destroyed then return end
+    espAcc = espAcc + dt
+    if espAcc < 1/30 then return end -- 30 Hz: las lines/names siguen fluidos y se corta el costo por frame
+    espAcc = 0
     local cam = workspace.CurrentCamera
     if not cam then return end
     local myChar = player.Character
@@ -2294,52 +2388,57 @@ local function setAnimateScript(char, enabled)
 end
 local function stopAllAnimsOnChar(char, isLocal)
     if not char then return end
+    if isLocal then return end -- MI personaje jamas: los demas deben seguir viendo mi animacion real
     setAnimateScript(char, false)
     local hum = char:FindFirstChildOfClass("Humanoid")
     local animator = hum and hum:FindFirstChildOfClass("Animator")
     forceKillTracks(animator)
     for _, d in ipairs(char:GetDescendants()) do if d:IsA("Animator") then forceKillTracks(d) end end
-    if not isLocal then zeroMotorTransforms(char) end
+    zeroMotorTransforms(char)
 end
 local function scrubAnims()
     for _, plr in ipairs(Players:GetPlayers()) do
-        local char = plr.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            forceKillTracks(hum and hum:FindFirstChildOfClass("Animator"))
-            if plr ~= player then zeroMotorTransforms(char) end
+        if plr ~= player then -- nunca tocar mi propio character
+            local char = plr.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                forceKillTracks(hum and hum:FindFirstChildOfClass("Animator"))
+                zeroMotorTransforms(char)
+            end
         end
     end
 end
 local function startAnimRemove()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character then task.spawn(stopAllAnimsOnChar, plr.Character, plr == player) end
+        if plr ~= player and plr.Character then task.spawn(stopAllAnimsOnChar, plr.Character, false) end
         table.insert(animRemove.Conns, plr.CharacterAdded:Connect(function(char)
             task.wait(0.05)
-            if animRemove.Enabled then stopAllAnimsOnChar(char, plr == player) end
+            if animRemove.Enabled and plr ~= player then stopAllAnimsOnChar(char, false) end
         end))
     end
     table.insert(animRemove.Conns, Players.PlayerAdded:Connect(function(plr)
         table.insert(animRemove.Conns, plr.CharacterAdded:Connect(function(char)
             task.wait(0.05)
-            if animRemove.Enabled then stopAllAnimsOnChar(char, plr == player) end
+            if animRemove.Enabled and plr ~= player then stopAllAnimsOnChar(char, false) end
         end))
     end))
-    table.insert(animRemove.Conns, RunService.RenderStepped:Connect(function()
-        if animRemove.Enabled then scrubAnims() end
+    local scrubAcc = 0
+    table.insert(animRemove.Conns, RunService.RenderStepped:Connect(function(dt)
+        if not animRemove.Enabled then scrubAcc = 0; return end
+        scrubAcc = scrubAcc + dt
+        if scrubAcc < 0.05 then return end -- 20 Hz en vez de 60: mismo efecto, 1/3 del trabajo
+        scrubAcc = 0
+        scrubAnims()
     end))
 end
 local function stopAnimRemove()
     for _, c in ipairs(animRemove.Conns) do pcall(function() c:Disconnect() end) end
     table.clear(animRemove.Conns)
     table.clear(animRemove.Cache)
-    local char = player.Character
-    if char then
-        setAnimateScript(char, true)
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health > 0 then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end) end
-        if AnimState.Selected then task.defer(function() ApplyAnims(AnimState.Selected) end) end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then setAnimateScript(plr.Character, true) end
     end
+    -- mi personaje nunca se modifico, asi que no hay nada que restaurar en el
 end
 
 local lowGraphicsCache = {}
@@ -2422,17 +2521,44 @@ end
 
 -- Botones / funciones que controlan los botones flotantes
 local buttons, buttonDefs = {}, {}
-local auraState = { Enabled = false, Conn = nil, Acc = 0 }
+local auraState = { Enabled = false, Conn = nil, Acc = 0, EquipAcc = 0 }
 local AURA_RANGE = 20
 local AURA_COOLDOWN = 0.3
+local AURA_EQUIP_CHECK = 0.1
+
+local function obtenerCuchillo()
+    local char = player.Character
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if char then for _, item in ipairs(char:GetChildren()) do if esCuchillo(item) then return item end end end
+    if backpack then for _, item in ipairs(backpack:GetChildren()) do if esCuchillo(item) then return item end end end
+    return nil
+end
+
+-- Logica anterior del aura: mientras este activa, el cuchillo SIEMPRE equipado
+-- en partida; en lobby se detiene con el detector estaEnLobby() (ya con PLAY/JUGAR).
+local function forceKnifeEquipped()
+    if not auraState.Enabled then return end
+    if estaEnLobby() then return end -- en el lobby jamas se equipa el cuchillo
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+    local held = char:FindFirstChildOfClass("Tool")
+    if held and esCuchillo(held) then return end
+    local knife = obtenerCuchillo()
+    if not knife then return end
+    pcall(function() hum:EquipTool(knife) end)
+end
 
 local function auraStep()
+    if estaEnLobby() then return end
     local remote = auraRemote
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     local tool = char:FindFirstChildOfClass("Tool")
-    local handle = tool and tool:FindFirstChild("Handle")
+    if not tool or not esCuchillo(tool) then return end -- el aura solo golpea con cuchillo
+    local handle = tool:FindFirstChild("Handle")
     if not handle then return end
     local myPos = hrp.Position
     local bestRoot, bestDist = nil, math.huge
@@ -2481,7 +2607,16 @@ local function setAura(on)
     auraEnabled = on
     if not on then refreshButtons(); return end
     auraState.Acc = 0
+    auraState.EquipAcc = 0
+    showNotice(T("NotifyAura"), T("KnifeAura"))
+    forceKnifeEquipped()
     auraState.Conn = RunService.Heartbeat:Connect(function(dt)
+        if not auraState.Enabled then return end
+        auraState.EquipAcc = auraState.EquipAcc + dt
+        if auraState.EquipAcc >= AURA_EQUIP_CHECK then
+            auraState.EquipAcc = 0
+            forceKnifeEquipped()
+        end
         auraState.Acc = auraState.Acc + dt
         if auraState.Acc < AURA_COOLDOWN then return end
         auraState.Acc = 0
@@ -2625,9 +2760,30 @@ local function setFly(on)
 end
 
 local bajarState = { Enabled = false, Floor = nil, ActivationPos = nil }
+local bajarConn = nil
 local function destroyBajarFloor()
     if bajarState.Floor and bajarState.Floor.Parent then pcall(function() bajarState.Floor:Destroy() end) end
     bajarState.Floor = nil
+end
+local function stopBajarMonitor()
+    if bajarConn then bajarConn:Disconnect(); bajarConn = nil end
+end
+-- Si muere el humanoid o desaparece el character, Bajar/Subir se apaga solo y
+-- se borra el piso, sin dejar el boton encendido ni al personaje abajo del mapa.
+local function startBajarMonitor()
+    stopBajarMonitor()
+    bajarConn = RunService.Heartbeat:Connect(function()
+        if not bajarState.Enabled then stopBajarMonitor(); return end
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not char.Parent or not hum or not hum.Parent or hum.Health <= 0 then
+            destroyBajarFloor()
+            bajarState.Enabled = false
+            bajarState.ActivationPos = nil
+            stopBajarMonitor()
+            refreshButtons()
+        end
+    end)
 end
 local function doBajar()
     local char = player.Character
@@ -2648,8 +2804,10 @@ local function doBajar()
     floor.CFrame = CFrame.new(dest.X, dest.Y - 3, dest.Z)
     floor.Parent = Workspace
     bajarState.Floor = floor; bajarState.Enabled = true
+    startBajarMonitor()
 end
 local function doSubir()
+    stopBajarMonitor()
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -3163,9 +3321,6 @@ local function setAutoKill(on)
     on = on == true
     if autoKillState.Enabled == on then return end
     autoKillState.Enabled = on
-    pcall(function()
-        if Window and Window.Notify then Window:Notify(on and "Auto Kill: ON" or "Auto Kill: OFF") end
-    end)
     if on then
         autoKillStopThreads()
         autoKillState.Target = nil
@@ -3212,6 +3367,7 @@ Feat.Aimbot = { get = function() return aimbotState and aimbotState.Enabled end,
 Feat.Fly = { get = function() return flyState.Enabled end, set = function(v) setFly(v) end }
 Feat.AutoKill = { get = function() return autoKillState.Enabled end, set = function(v) setAutoKill(v) end }
 Feat.Bajar = { get = function() return bajarState.Enabled end, set = function(v) if v then doBajar() else doSubir() end end }
+getgenv().XitadoFeat = Feat -- API publica para probar/controlar funciones desde el executor.
 
 local function FeatSet(name, v)
     local f = Feat[name]
@@ -3638,13 +3794,11 @@ end
 local MOD_EFFECTS_URL = "https://raw.githubusercontent.com/idkclantix/v2/refs/heads/main/effects"
 local modEffectBuilders = {}
 local modFXTemplateCache = {}
-local modEffectsLoaded = false
 local okEffects, effectBuilders = pcall(function()
     return loadstring(game:HttpGet(MOD_EFFECTS_URL))()
 end)
 if okEffects and type(effectBuilders) == "table" then
     modEffectBuilders = effectBuilders
-    modEffectsLoaded = true
     for name, builder in pairs(effectBuilders) do
         if type(builder) == "function" then modAddFX(name, modHeavyFXColor(name)) end
     end
@@ -4419,6 +4573,378 @@ local modCursor = (function()
     return M
 end)()
 
+-- Varita: tool 3 (knife = 1, gun = 2). Un palo simple: 1 clic marca los bordes
+-- de la parte de Workspace en blanco, 2 clics la borra en este cliente.
+local modWand = (function()
+    local M = {
+        Enabled = false, Tool = nil, Folder = nil, Conns = {},
+        Current = nil, WatchGen = 0, -- solo una parte marcada a la vez
+        WatchedPack = nil, Deleted = {}, -- copias de lo que borramos, para restaurar
+        Reordering = false, LastReorder = 0,
+        Clicks = setmetatable({}, { __mode = "k" }),
+        Marks = setmetatable({}, { __mode = "k" }),
+        Touch = { Active = {}, Start = {}, Drag = {}, Time = {} },
+    }
+    local TOOL_NAME = "Varita"
+    local TOOL_SLOT = 3 -- gun = 2, knife = 1
+    local CLICK_DEDUPE = 0.12
+    local lastClick = 0
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    -- Usamos el mismo detector de lobby que el resto del script.
+    local isInLobby = estaEnLobby
+
+    local function wandEquipped()
+        local char = player.Character
+        if not char then return false end
+        local held = char:FindFirstChildOfClass("Tool")
+        if not held then return false end
+        return held == M.Tool or held.Name == TOOL_NAME or held:GetAttribute("XitadoToolSlot") == TOOL_SLOT
+    end
+
+    local function ensureFolder()
+        if M.Folder and M.Folder.Parent then return M.Folder end
+        local f = Workspace:FindFirstChild("XitadoWandFX")
+        if not f then
+            f = Instance.new("Folder")
+            f.Name = "XitadoWandFX"
+            f.Parent = Workspace
+        end
+        M.Folder = f
+        return f
+    end
+
+    local function makeTool()
+        local tool = Instance.new("Tool")
+        tool.Name = TOOL_NAME
+        tool.RequiresHandle = true
+        tool.CanBeDropped = false
+        -- Varios nombres de atributo para que cualquier logica de slots del juego
+        -- (o de un executor) detecte esta tool como la del slot 3.
+        for _, key in ipairs({ "XitadoToolSlot", "Slot", "ToolSlot", "EquipSlot", "InventorySlot" }) do
+            tool:SetAttribute(key, TOOL_SLOT)
+        end
+        local stick = Instance.new("Part")
+        stick.Name = "Handle"
+        stick.Size = Vector3.new(0.35, 5, 0.35)
+        stick.Material = Enum.Material.Wood
+        stick.Color = Color3.fromRGB(139, 94, 54)
+        stick.CanCollide = false
+        stick.CastShadow = false
+        stick.Parent = tool
+        return tool
+    end
+
+    local function findWandTools()
+        local list = {}
+        local char = player.Character
+        local pack = player:FindFirstChildOfClass("Backpack")
+        for _, cont in ipairs({ char, pack }) do
+            if cont then
+                for _, o in ipairs(cont:GetChildren()) do
+                    if o:IsA("Tool") and (o.Name == TOOL_NAME or o:GetAttribute("XitadoToolSlot") == TOOL_SLOT) then
+                        list[#list+1] = o
+                    end
+                end
+            end
+        end
+        return list
+    end
+
+    -- La hotbar de Roblox asigna el slot segun el orden en que entran las tools.
+    -- Reparentar una tool existente la mueve al primer slot libre (slot 1), asi que
+    -- NUNCA hacemos eso: solo recreamos la varita cuando hace falta.
+    local function hotbarName(slotIndex)
+        local ok, name = pcall(function()
+            local rg = game:GetService("CoreGui"):FindFirstChild("RobloxGui")
+            local bp = rg and rg:FindFirstChild("Backpack")
+            local hb = bp and bp:FindFirstChild("Hotbar")
+            local s = hb and hb:FindFirstChild(tostring(slotIndex))
+            local tn = s and s:FindFirstChild("ToolName")
+            return tn and tn.Text or ""
+        end)
+        return ok and name or ""
+    end
+
+    local function wandInSlot3()
+        return hotbarName(3) == TOOL_NAME
+    end
+
+    -- Si por algun motivo la varita quedo en otro slot, reinsertamos las tools
+    -- en orden (knife, gun, varita) para que Roblox le asigne el slot 3.
+    local function reseatTools()
+        if destroyed or M.Reordering then return end
+        local pack = player:FindFirstChildOfClass("Backpack")
+        local char = player.Character
+        if not pack then return end
+        if char and char:FindFirstChildOfClass("Tool") then return end
+        if tick() - M.LastReorder < 4 then return end
+        M.LastReorder = tick()
+        M.Reordering = true
+        local others, fillers = {}, {}
+        local fillerNames = { "XitadoSlot1", "XitadoSlot2" }
+        local isFiller = { [fillerNames[1]] = true, [fillerNames[2]] = true }
+        for _, o in ipairs(pack:GetChildren()) do
+            if o:IsA("Tool") and o ~= M.Tool and o.Name ~= TOOL_NAME and not isFiller[o.Name] then
+                others[#others + 1] = o
+            elseif o:IsA("Tool") and isFiller[o.Name] then
+                pcall(function() o:Destroy() end)
+            end
+        end
+        -- Si el juego no da cuchillo/pistola, ponemos herramientas vacias para
+        -- que la varita siga cayendo en el slot 3.
+        while #others < 2 do
+            local t = Instance.new("Tool")
+            t.Name = fillerNames[#others + 1]
+            t.RequiresHandle = false
+            t.CanBeDropped = false
+            fillers[#fillers + 1] = t
+            others[#others + 1] = t
+        end
+        if M.Tool then pcall(function() M.Tool:Destroy() end) end
+        for _, t in ipairs(others) do pcall(function() t.Parent = nil end) end
+        task.wait(0.2)
+        for _, t in ipairs(others) do
+            pcall(function() t.Parent = pack end)
+            task.wait(0.15)
+        end
+        local tool = makeTool()
+        M.Tool = tool
+        tool.Parent = pack
+        task.wait(0.2)
+        M.Reordering = false
+    end
+
+    local function watchBackpack()
+        local pack = player:FindFirstChildOfClass("Backpack")
+        if not pack or pack == M.WatchedPack then return end
+        M.WatchedPack = pack
+        -- El watcher principal se encarga de reentregar/recolocar la varita.
+    end
+
+    -- Guarda una copia sin parent antes de borrar, para el boton "restaurar cosas".
+    local function rememberDeleted(part)
+        if not part or not part.Parent then return end
+        local ok, clone = pcall(function() return part:Clone() end)
+        if not ok or not clone then return end
+        table.insert(M.Deleted, { Clone = clone, Parent = part.Parent })
+    end
+
+    -- Reentrega la varita si desaparecio y elimina cualquier duplicado.
+    local function giveTool()
+        if destroyed or M.Reordering then return end
+        local tools = findWandTools()
+        local keep = nil
+        for _, t in ipairs(tools) do
+            if t.Parent == player.Character then keep = t; break end -- priorizar la que esta equipada
+        end
+        keep = keep or tools[1]
+        for _, t in ipairs(tools) do
+            if t ~= keep then pcall(function() t:Destroy() end) end
+        end
+        if keep and keep.Parent then
+            M.Tool = keep
+            return keep
+        end
+        local tool = makeTool()
+        M.Tool = tool
+        tool.Parent = player:FindFirstChildOfClass("Backpack") or player.Character
+        return tool
+    end
+
+    local function clearMark(part)
+        if not part then return end
+        local h = M.Marks[part]
+        if h then pcall(function() h:Destroy() end); M.Marks[part] = nil end
+        M.Clicks[part] = nil
+        if M.Current == part then M.Current = nil end
+    end
+
+    local function clearCurrentMark()
+        if M.Current then clearMark(M.Current) end
+    end
+
+    local function markPart(part)
+        if M.Marks[part] then return end
+        local h = Instance.new("Highlight")
+        h.Name = "XitadoWandEdge"
+        h.Adornee = part
+        h.FillTransparency = 1
+        h.OutlineColor = Color3.new(1, 1, 1)
+        h.OutlineTransparency = 0
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = ensureFolder()
+        M.Marks[part] = h
+        M.Current = part -- solo esta parte queda con contorno blanco
+    end
+
+    local function onPartClick(screenPos)
+        if not M.Enabled or destroyed then return end
+        if not wandEquipped() then return end   -- debe estar en la mano, no solo en el inventario
+        if isInLobby() then return end          -- en el lobby no se puede usar
+        local cam = Workspace.CurrentCamera
+        if not cam or typeof(screenPos) ~= "Vector2" then return end
+        local now = os.clock()
+        if now - lastClick < CLICK_DEDUPE then return end
+        lastClick = now
+        local ray = cam:ViewportPointToRay(screenPos.X, screenPos.Y, 0)
+        rayParams.FilterDescendantsInstances = { player.Character }
+        local hit = Workspace:Raycast(ray.Origin, ray.Direction * 1200, rayParams)
+        if not hit then return end
+        local part = hit.Instance
+        if not part or not part:IsA("BasePart") then return end
+        local model = part:FindFirstAncestorOfClass("Model")
+        if model and Players:GetPlayerFromCharacter(model) then return end
+        if part:FindFirstAncestor("XitadoWandFX") or string.find(part.Name, "Xitado", 1, true) then return end
+
+        -- Misma parte marcada: segundo clic lo borra (y se guarda para restaurar).
+        if M.Current == part then
+            clearMark(part)
+            rememberDeleted(part)
+            pcall(function() part:Destroy() end)
+            return
+        end
+        -- Parte distinta: se quita el contorno anterior y queda solo el nuevo.
+        clearCurrentMark()
+        M.Clicks[part] = 1
+        markPart(part)
+    end
+
+    local function connectInputs()
+        table.insert(M.Conns, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed or not M.Enabled then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                onPartClick(UserInputService:GetMouseLocation())
+            elseif input.UserInputType == Enum.UserInputType.Touch then
+                local cam = Workspace.CurrentCamera
+                local vp = cam and cam.ViewportSize
+                if vp and input.Position.X >= vp.X * 0.5 then return end -- derecha = camara
+                local pos = Vector2.new(input.Position.X, input.Position.Y)
+                M.Touch.Active[input] = pos
+                M.Touch.Start[input] = pos
+                M.Touch.Drag[input] = false
+                M.Touch.Time[input] = os.clock()
+            end
+        end))
+        table.insert(M.Conns, UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.Touch then return end
+            local start = M.Touch.Start[input]
+            if start and (Vector2.new(input.Position.X, input.Position.Y) - start).Magnitude > 12 then
+                M.Touch.Drag[input] = true
+                M.Touch.Active[input] = nil
+            end
+        end))
+        table.insert(M.Conns, UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.Touch then return end
+            local active = M.Touch.Active[input]
+            local dragged = M.Touch.Drag[input]
+            local t0 = M.Touch.Time[input]
+            M.Touch.Active[input] = nil
+            M.Touch.Start[input] = nil
+            M.Touch.Drag[input] = nil
+            M.Touch.Time[input] = nil
+            if active and not dragged and t0 and (os.clock() - t0) <= 0.3 then
+                onPartClick(Vector2.new(input.Position.X, input.Position.Y))
+            end
+        end))
+        table.insert(M.Conns, player.CharacterAdded:Connect(function()
+            task.wait(0.3)
+            if M.Enabled and not destroyed then giveTool() end
+        end))
+        -- Si se desequipa la varita (por ejemplo equipan el cuchillo), los bordes
+        -- de las partes marcadas deben desaparecer.
+        local equipAcc = 0
+        table.insert(M.Conns, RunService.Heartbeat:Connect(function(dt)
+            if not M.Enabled then equipAcc = 0; return end
+            equipAcc = equipAcc + dt
+            if equipAcc < 0.1 then return end
+            equipAcc = 0
+            if M.Current and not wandEquipped() then
+                for part in pairs(M.Marks) do clearMark(part) end
+                table.clear(M.Clicks)
+                M.Current = nil
+            end
+        end))
+    end
+
+    function M.Enable()
+        if M.Enabled then return end
+        M.Enabled = true
+        ensureFolder()
+        giveTool()
+        watchBackpack()
+        connectInputs()
+        -- Vigilar que la varita nunca falte, no se duplique y siga en el slot 3.
+        M.WatchGen = M.WatchGen + 1
+        local gen = M.WatchGen
+        task.spawn(function()
+            while gen == M.WatchGen and M.Enabled and not destroyed do
+                task.wait(0.5)
+                if gen ~= M.WatchGen or not M.Enabled or destroyed then break end
+                watchBackpack()
+                if not M.Reordering then
+                    giveTool()
+                    if M.Tool and M.Tool.Parent and not wandInSlot3() then
+                        reseatTools()
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Devuelve las partes borradas con la varita a su lugar original.
+    function M.Restore()
+        local restored = 0
+        for i = #M.Deleted, 1, -1 do
+            local entry = M.Deleted[i]
+            local clone = entry and entry.Clone
+            if clone then
+                local dest = entry.Parent
+                if not dest or not dest.Parent then dest = Workspace end
+                if dest and dest.Parent then
+                    pcall(function() clone.Parent = dest end)
+                    restored = restored + 1
+                end
+            end
+            table.remove(M.Deleted, i)
+        end
+        return restored
+    end
+
+    -- Expuesto para pruebas / uso directo: Click(screenPos) hace lo mismo que un clic del mouse.
+    function M.Click(screenPos) onPartClick(screenPos) end
+
+    function M.Disable()
+        M.Enabled = false
+        M.WatchGen = M.WatchGen + 1
+        for _, c in ipairs(M.Conns) do pcall(function() c:Disconnect() end) end
+        table.clear(M.Conns)
+        M.WatchedPack = nil
+        clearCurrentMark()
+        for part in pairs(M.Marks) do clearMark(part) end
+        table.clear(M.Clicks)
+        M.Current = nil
+        if M.Tool then pcall(function() M.Tool:Destroy() end); M.Tool = nil end
+        local pack = player:FindFirstChildOfClass("Backpack")
+        if pack then
+            for _, t in ipairs(pack:GetChildren()) do
+                if t:IsA("Tool") and (t.Name == "XitadoSlot1" or t.Name == "XitadoSlot2") then
+                    pcall(function() t:Destroy() end)
+                end
+            end
+        end
+        if M.Folder then pcall(function() M.Folder:Destroy() end); M.Folder = nil end
+        table.clear(M.Touch.Active)
+        table.clear(M.Touch.Start)
+        table.clear(M.Touch.Drag)
+        table.clear(M.Touch.Time)
+    end
+
+    getgenv().XitadoWand = M -- API publica para probar/usar la varita desde el executor.
+    return M
+end)()
+
 return {
     Walk = modWalk, StopWalk = modStopWalk, StartWalk = modStartWalk,
     KillSound = modKillSound, KillSoundOptions = modKillSoundOptions,
@@ -4428,7 +4954,7 @@ return {
     StartKillDetection = modStartKillDetection, StopKillDetection = modStopKillDetection,
     StartShootWatchers = modStartShootWatchers, StopShootWatchers = modStopShootWatchers,
     ShootSound = modShootSound, ShootNames = modShootNames, ShootSounds = ModShootSounds,
-    Streak = modStreak, Cursor = modCursor,
+    Streak = modStreak, Cursor = modCursor, Wand = modWand,
     DeathSoundConns = modDeathSoundConns, RemoteConns = modRemoteConns, StatConns = modStatConns,
     EffectBuilders = modEffectBuilders, FXTemplateCache = modFXTemplateCache,
     KillSoundPlayer = ModKillSoundPlayer, ShootSoundPlayer = ModShootSoundPlayer,
@@ -4756,6 +5282,23 @@ local ddCursor = secModCursor:Dropdown({
 })
 table.insert(uiRefs, { el = ddCursor, key = "CursorPicker", kind = "dropdown" })
 
+-- Tool como seccion propia, igual que el resto de separadores del menu.
+local secTool = TabMods:Section({ Title = T("Tool"), Opened = true })
+table.insert(uiRefs, { el = secTool, key = "Tool", kind = "section" })
+
+local togWand = secTool:Toggle({ Title = T("Wand"), Value = false, Callback = function(v)
+    if v then Mod.Wand.Enable() else Mod.Wand.Disable() end
+end })
+table.insert(uiRefs, { el = togWand, key = "Wand", kind = "toggle" })
+
+local btnRestore = secTool:Button({
+    Title = T("RestoreThings"),
+    Callback = function()
+        Mod.Wand.Restore()
+    end,
+})
+table.insert(uiRefs, { el = btnRestore, key = "RestoreThings", kind = "button" })
+
 local secEnemies = TabEsp:Section({ Title = T("SecEnemies"), Opened = true })
 table.insert(uiRefs, { el = secEnemies, key = "SecEnemies", kind = "section" })
 secEnemies:Toggle({ Title = T("Esp"),    Value = true,  Callback = function(v) espEnemy.Enabled = v end })
@@ -4893,7 +5436,7 @@ local btnApply = secMenu:Button({
         pcall(ApplyButtonLanguage)
 
         local notif = T("NotifyLang")
-        if Window.Notify then pcall(function() Window:Notify(notif) end) end
+        showNotice(notif)
     end,
 })
 table.insert(uiRefs, { el = btnApply, key = "Apply", kind = "button" })
@@ -4979,10 +5522,8 @@ local function onHubDestroy()
         table.clear(macroTouch.StartTime)
     end)
     pcall(function()
-        if autoEventFarm then
-            autoEventFarm.Active = false
-            autoEventFarm.Remote = nil
-        end
+        if FarmCtl then FarmCtl.Stop() end
+        if autoEventFarm then autoEventFarm.Remote = nil end
     end)
 
     if espConnection then pcall(function() espConnection:Disconnect() end); espConnection = nil end
@@ -4995,6 +5536,7 @@ local function onHubDestroy()
     pcall(function() setAutoKill(false) end)
     pcall(function() if setAimbot then setAimbot(false) end end)
     pcall(function() setInvisible(false) end)
+    pcall(stopBajarMonitor)
     pcall(function() if bajarState.Enabled then doSubir() end end)
     pcall(CleanupButtons)
 
@@ -5017,6 +5559,15 @@ local function onHubDestroy()
     end)
     pcall(function() Mod.Streak.Cleanup() end)
     pcall(function() Mod.Cursor.Remove() end)
+    pcall(function() Mod.Wand.Disable() end)
+    pcall(function()
+        for _, root in ipairs({ CoreGui }) do
+            for _, c in ipairs(root:GetChildren()) do
+                if c.Name == "XitadoAuraNotify" then c:Destroy() end
+            end
+        end
+        if gethui then local h = gethui(); if h then for _, c in ipairs(h:GetChildren()) do if c.Name == "XitadoAuraNotify" then c:Destroy() end end end end
+    end)
     pcall(function() NameChanger.Stop() end)
     pcall(function() Mod.KillSoundPlayer:Destroy(); Mod.ShootSoundPlayer:Destroy() end)
 
