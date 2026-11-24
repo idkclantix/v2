@@ -2625,7 +2625,7 @@ local function setAura(on)
     refreshButtons()
 end
 
-local flyState = { Enabled = false, Speed = 40, Conn = nil, TouchConns = {} }
+local flyState = { Enabled = false, Speed = 50, Conn = nil, TouchConns = {} }
 local isTouchFly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local flyTouchMove = { Input = nil, Start = Vector2.new(), Now = Vector2.new() }
 local safeFlyPos = nil
@@ -3647,6 +3647,7 @@ local function modScanDeathSounds(container, mute)
 end
 
 local ModKillSounds = {
+    -- Xitado
     ["Sword Hit"]       = 140462043853173,
     ["TF2"]             = 2866718318,
     ["SpongeBob Laugh"] = 271580013,
@@ -3657,8 +3658,22 @@ local ModKillSounds = {
     ["Among Us"]        = 7227567562,
     ["Mambo"]           = 138707899268973,
     ["Sata Andagi"]     = 109412872124861,
-    ["Anime Magic"]     = 109296938403067,
+    ["Anime Magic"]     = 109296938403067, -- = chispa (SZK), un solo entry
     ["Nono"]            = 134150405079357,
+    -- SZK (ids unicos)
+    ["Onichaan"]        = 114361503583259,
+    ["Omagaa"]          = 4496966777,
+    ["korum"]           = 119896940405402,
+    ["FAh"]             = 92076037937225,
+    ["Campana meme"]    = 107378927201728,
+    ["Enrique"]         = 100688006999379,
+    ["Risa anime"]      = 93739527256723,
+    ["Gemido"]          = 94981264286350,
+    ["Magic"]           = 100507897550384,
+    ["OwO"]             = 71942674274967,
+    ["SEMPAI"]          = 115498703521334,
+    ["Ahhh"]            = 83559496188823,
+    ["ñyaa"]            = 78798011197804,
 }
 local ModKillSoundVolumes = {
     ["Sword Hit"]       = 5,
@@ -3673,6 +3688,19 @@ local ModKillSoundVolumes = {
     ["Sata Andagi"]     = 3.5,
     ["Anime Magic"]     = 2.5,
     ["Nono"]            = 2.5,
+    ["Onichaan"]        = 3.5,
+    ["Omagaa"]          = 3.5,
+    ["korum"]           = 3.5,
+    ["FAh"]             = 4,
+    ["Campana meme"]    = 3.5,
+    ["Enrique"]         = 3.5,
+    ["Risa anime"]      = 3.5,
+    ["Gemido"]          = 3.5,
+    ["Magic"]           = 2.5,
+    ["OwO"]             = 3.5,
+    ["SEMPAI"]          = 3.5,
+    ["Ahhh"]            = 3.5,
+    ["ñyaa"]            = 3.5,
 }
 local modKillSound = { Enabled = false, Selected = "Ez", Volume = 5 }
 local modKillSoundOptions = {}
@@ -4212,21 +4240,24 @@ local function modStartShootWatchers()
     end))
 end
 
-local modWalk = { Enabled = false, Speed = 0.2, Conn = nil }
+-- Speed estilo SZK: CFrame += MoveDirection * Multiplier (max 100).
+-- La misma Multiplier se reutiliza para el fly.
+local modWalk = { Enabled = false, Speed = 50, Conn = nil }
 local function modStopWalk()
     if modWalk.Conn then modWalk.Conn:Disconnect(); modWalk.Conn = nil end
 end
 local function modStartWalk()
     modStopWalk()
-    modWalk.Conn = RunService.RenderStepped:Connect(function(dt)
+    modWalk.Conn = RunService.Heartbeat:Connect(function()
         if destroyed or not modWalk.Enabled or flyState.Enabled or invisState.Enabled then return end
         local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
         if not root or not hum or hum.Health <= 0 then return end
         local moveDir = hum.MoveDirection
-        if moveDir.Magnitude > 0.01 then
-            root.CFrame = root.CFrame + moveDir * modWalk.Speed * math.min(dt * 60, 3)
+        if moveDir.Magnitude > 0 then
+            root.CFrame = root.CFrame + (moveDir * modWalk.Speed)
         end
     end)
 end
@@ -4732,6 +4763,17 @@ local modWand = (function()
     end
 
     -- Reentrega la varita si desaparecio y elimina cualquier duplicado.
+    local function bindToolActivated(tool)
+        if not tool or tool:GetAttribute("XitadoWandBound") then return end
+        tool:SetAttribute("XitadoWandBound", true)
+        table.insert(M.Conns, tool.Activated:Connect(function()
+            if not M.Enabled or destroyed or not wandEquipped() then return end
+            local now = os.clock()
+            if now - lastClick < 0.25 then return end
+            onPartClick(UserInputService:GetMouseLocation())
+        end))
+    end
+
     local function giveTool()
         if destroyed or M.Reordering then return end
         local tools = findWandTools()
@@ -4745,11 +4787,13 @@ local modWand = (function()
         end
         if keep and keep.Parent then
             M.Tool = keep
+            bindToolActivated(keep)
             return keep
         end
         local tool = makeTool()
         M.Tool = tool
         tool.Parent = player:FindFirstChildOfClass("Backpack") or player.Character
+        bindToolActivated(tool)
         return tool
     end
 
@@ -4811,15 +4855,28 @@ local modWand = (function()
         markPart(part)
     end
 
+    -- Misma deteccion de tap que el macro (celular): lado derecho, sin drag, tap corto.
+    -- MinXFraction / DragPx / MaxTapTime alineados con macroTouch.
+    local WAND_MIN_X = 0.45
+    local WAND_DRAG_PX = 10
+    local WAND_MAX_TAP = 0.3
+    local WAND_TOUCH_DEDUPE = 0.25 -- un tap genera Touch + MouseButton1 / Activated
+
     local function connectInputs()
+        if M.Tool then bindToolActivated(M.Tool) end
+
         table.insert(M.Conns, UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed or not M.Enabled then return end
+            if not M.Enabled or destroyed then return end
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                -- PC: respetar gameProcessed. Celular: MouseButton1 a veces llega
+                -- junto al Touch; el dedupe de onPartClick evita doble marca.
+                if gameProcessed and not UserInputService.TouchEnabled then return end
                 onPartClick(UserInputService:GetMouseLocation())
             elseif input.UserInputType == Enum.UserInputType.Touch then
+                -- Igual que macro: solo mitad derecha (izquierda = joystick movimiento)
                 local cam = Workspace.CurrentCamera
-                local vp = cam and cam.ViewportSize
-                if vp and input.Position.X >= vp.X * 0.5 then return end -- derecha = camara
+                local width = cam and cam.ViewportSize.X or 0
+                if width <= 0 or input.Position.X < width * WAND_MIN_X then return end
                 local pos = Vector2.new(input.Position.X, input.Position.Y)
                 M.Touch.Active[input] = pos
                 M.Touch.Start[input] = pos
@@ -4830,9 +4887,12 @@ local modWand = (function()
         table.insert(M.Conns, UserInputService.InputChanged:Connect(function(input)
             if input.UserInputType ~= Enum.UserInputType.Touch then return end
             local start = M.Touch.Start[input]
-            if start and (Vector2.new(input.Position.X, input.Position.Y) - start).Magnitude > 12 then
-                M.Touch.Drag[input] = true
-                M.Touch.Active[input] = nil
+            if start then
+                local delta = (Vector2.new(input.Position.X, input.Position.Y) - start).Magnitude
+                if delta > WAND_DRAG_PX then
+                    M.Touch.Drag[input] = true
+                    M.Touch.Active[input] = nil
+                end
             end
         end))
         table.insert(M.Conns, UserInputService.InputEnded:Connect(function(input)
@@ -4844,9 +4904,17 @@ local modWand = (function()
             M.Touch.Start[input] = nil
             M.Touch.Drag[input] = nil
             M.Touch.Time[input] = nil
-            if active and not dragged and t0 and (os.clock() - t0) <= 0.3 then
+            local isRealClick = active and not dragged
+                and t0 ~= nil and (os.clock() - t0) <= WAND_MAX_TAP
+            if isRealClick then
                 onPartClick(Vector2.new(input.Position.X, input.Position.Y))
             end
+        end))
+        table.insert(M.Conns, UserInputService.WindowFocusReleased:Connect(function()
+            table.clear(M.Touch.Active)
+            table.clear(M.Touch.Start)
+            table.clear(M.Touch.Drag)
+            table.clear(M.Touch.Time)
         end))
         table.insert(M.Conns, player.CharacterAdded:Connect(function()
             task.wait(0.3)
@@ -5085,10 +5153,14 @@ end })
 table.insert(uiRefs, { el = togModWalk, key = "WalkSpeed", kind = "toggle" })
 
 local inpWalkSpeed = secModPlayer:Input({
-    Title = T("Speed"), Placeholder = "1.1 (0-1.5)", Value = "1.1",
+    Title = T("Speed"), Placeholder = "50 (0-100)", Value = "50",
     Callback = function(text)
         local n = tonumber(text)
-        if n then Mod.Walk.Speed = math.max(0, math.clamp(n, 0, 1.5) - 0.9) end
+        if n then
+            n = math.clamp(n, 0, 100)
+            Mod.Walk.Speed = n
+            flyState.Speed = n
+        end
     end,
 })
 table.insert(uiRefs, { el = inpWalkSpeed, key = "Speed", kind = "input" })
@@ -5099,10 +5171,14 @@ end })
 table.insert(uiRefs, { el = togModFly, key = "Fly", kind = "toggle" })
 
 local inpFlySpeed = secModPlayer:Input({
-    Title = T("Speed"), Placeholder = "40 (sin limite)", Value = "40",
+    Title = T("Speed"), Placeholder = "50 (0-100)", Value = "50",
     Callback = function(text)
         local n = tonumber(text)
-        if n then flyState.Speed = n end -- sin limite de velocidad
+        if n then
+            n = math.clamp(n, 0, 100)
+            flyState.Speed = n
+            Mod.Walk.Speed = n
+        end
     end,
 })
 table.insert(uiRefs, { el = inpFlySpeed, key = "Speed", kind = "input" })
