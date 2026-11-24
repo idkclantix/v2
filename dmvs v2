@@ -4242,22 +4242,24 @@ end
 
 -- Speed estilo SZK: CFrame += MoveDirection * Multiplier (max 100).
 -- La misma Multiplier se reutiliza para el fly.
-local modWalk = { Enabled = false, Speed = 50, Conn = nil }
+-- Speed tal cual SZK: Multiplier = UI/100 (default 50 -> 0.5, max 200 -> 2.0)
+local modWalk = { Enabled = false, Multiplier = 0.5, Conn = nil }
 local function modStopWalk()
     if modWalk.Conn then modWalk.Conn:Disconnect(); modWalk.Conn = nil end
 end
 local function modStartWalk()
     modStopWalk()
     modWalk.Conn = RunService.Heartbeat:Connect(function()
-        if destroyed or not modWalk.Enabled or flyState.Enabled or invisState.Enabled then return end
-        local char = player.Character
-        if not char then return end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not root or not hum or hum.Health <= 0 then return end
-        local moveDir = hum.MoveDirection
-        if moveDir.Magnitude > 0 then
-            root.CFrame = root.CFrame + (moveDir * modWalk.Speed)
+        if destroyed or not modWalk.Enabled then return end
+        if flyState.Enabled or invisState.Enabled then return end
+        local c = player.Character
+        if not c then return end
+        local hum = c:FindFirstChildOfClass("Humanoid")
+        local rp = c:FindFirstChild("HumanoidRootPart")
+        if not rp or not hum then return end
+        local md = hum.MoveDirection
+        if md.Magnitude > 0 then
+            rp.CFrame = rp.CFrame + (md * modWalk.Multiplier)
         end
     end)
 end
@@ -5152,13 +5154,14 @@ local togModWalk = secModPlayer:Toggle({ Title = T("WalkSpeed"), Value = false, 
 end })
 table.insert(uiRefs, { el = togModWalk, key = "WalkSpeed", kind = "toggle" })
 
+-- SZK exacto: UI 10-200 default 50 -> Multiplier = n/100 (0.1 a 2.0)
 local inpWalkSpeed = secModPlayer:Input({
-    Title = T("Speed"), Placeholder = "50 (0-100)", Value = "50",
+    Title = T("Speed"), Placeholder = "50 (10-200)", Value = "50",
     Callback = function(text)
         local n = tonumber(text)
         if n then
-            n = math.clamp(n, 0, 100)
-            Mod.Walk.Speed = n
+            n = math.clamp(n, 10, 200)
+            Mod.Walk.Multiplier = n / 100
             flyState.Speed = n
         end
     end,
@@ -5171,13 +5174,13 @@ end })
 table.insert(uiRefs, { el = togModFly, key = "Fly", kind = "toggle" })
 
 local inpFlySpeed = secModPlayer:Input({
-    Title = T("Speed"), Placeholder = "50 (0-100)", Value = "50",
+    Title = T("Speed"), Placeholder = "50 (10-200)", Value = "50",
     Callback = function(text)
         local n = tonumber(text)
         if n then
-            n = math.clamp(n, 0, 100)
+            n = math.clamp(n, 10, 200)
             flyState.Speed = n
-            Mod.Walk.Speed = n
+            Mod.Walk.Multiplier = n / 100
         end
     end,
 })
